@@ -37,7 +37,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
       - run: npm ci && npm ci --prefix backend && npm ci --prefix store
-      - run: python scripts/package-backend.py
+      - run: npm prune --prefix backend --omit=dev
+      - run: python scripts/package-backend.py --with-dependencies
       - uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}

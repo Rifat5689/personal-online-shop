@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import zipfile
 root = Path(__file__).resolve().parent.parent
 output = root / 'release' / 'backend.zip'
@@ -10,4 +11,8 @@ with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
                 archive.write(file, file.relative_to(root / 'backend'))
     for name in ['server.js', 'package.json', 'package-lock.json']:
         archive.write(root / 'backend' / name, name)
+    if '--with-dependencies' in sys.argv:
+        for file in (root / 'backend' / 'node_modules').rglob('*'):
+            if file.is_file():
+                archive.write(file, file.relative_to(root / 'backend'))
 print('Packaged backend source without credentials or local dependencies.')
