@@ -38,11 +38,17 @@ jobs:
         with: {node-version: '22'}
       - run: npm ci && npm ci --prefix backend && npm ci --prefix store
       - run: python scripts/package-backend.py
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
       - uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_APP }}
-          publish-profile: ${{ inputs.target == 'production' && secrets.AZURE_PROFILE_PRODUCTION || secrets.AZURE_PROFILE_TEST }}
           package: release/backend.zip
+      - name: Wait for backend readiness
+        run: curl --fail --retry 15 --retry-delay 5 --retry-connrefused "$API_ORIGIN/api/v1/health"
       - run: npm run build
       - uses: google-github-actions/auth@v2
         with:
