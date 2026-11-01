@@ -1,0 +1,13 @@
+# Setup before production launch
+
+1. Review the test storefront at https://test-originsofbeauty.web.app and its admin at `/secure/admin`. Demo login is autofilled. Confirm shipping rates, product stock/prices, images, contact information, order processing and mobile navigation.
+2. Production is prepared under Firebase project `personalshop` and Azure app `originsofbeauty`. Its database and image container are separate from testing and Ownshop. The frontend remains unpublished until the manual launch workflow runs.
+3. Replace the initial owner password securely in the production database before taking real orders; the copied admin settings do not include password management. Check the store's public support email, WhatsApp number and shipping policy. Rotate the MongoDB credential supplied during setup through Azure app settings when appropriate. Never commit credentials.
+4. Confirm Azure app settings `MONGODB_URI`, `ACCESS_TOKEN_SECRET`, `REFRESH_TOKEN_SECRET`, `STORE_SLUG`, `CORS_ORIGIN`, `AZURE_STORAGE_ACCOUNT_NAME`, and `AZURE_STORAGE_CONTAINER`. Keep mirroring disabled. Production CORS must include `https://originsofbeauty.web.app`; testing must include `https://test-originsofbeauty.web.app`.
+5. Confirm GitHub secrets `AZURE_PROFILE_TEST` and `AZURE_PROFILE_PRODUCTION`. Firebase deployment uses repository-restricted Google workload identities, not downloaded service-account keys. Repository variable `DEPLOY_ENABLED=true` enables deployment jobs.
+6. Merge the verified release from `develop` to `main`. In GitHub Actions, open **Deploy isolated shop**, select the `main` branch and `production`, then run the workflow. It deploys the production backend, builds without demo autofill, and publishes `originsofbeauty.web.app`.
+7. Verify `/`, product details, cart/checkout, order tracking and `/secure/admin` on the production URL before taking real orders. Checkout uses cash on delivery; no online-payment integration was added.
+
+Testing adds demo inventory; it is not promoted into the production database. Changes to the old Ownshop store after the initial copy are not automatically copied. The production data snapshot should be reviewed before launch.
+
+The Firebase CLI is signed in as `rifatbhai5689@gmail.com`. Its account-list command unexpectedly printed authentication material during setup. Renew/revoke that CLI session through the Google account's connected-app controls; no Google access or refresh token is stored in this repository or its workflows.

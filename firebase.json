@@ -1,0 +1,46 @@
+{
+    "hosting":  {
+                    "site":  "test-originsofbeauty",
+                    "public":  "store/dist",
+                    "ignore":  [
+                                   "firebase.json",
+                                   "**/.*",
+                                   "**/node_modules/**"
+                               ],
+                    "cleanUrls":  true,
+                    "headers":  [
+                                    {
+                                        "source":  "/secure/**",
+                                        "headers":  [
+                                                        {
+                                                            "key":  "Cache-Control",
+                                                            "value":  "no-store"
+                                                        },
+                                                        {
+                                                            "key":  "X-Robots-Tag",
+                                                            "value":  "noindex, nofollow"
+                                                        }
+                                                    ]
+                                    },
+                                    {
+                                        "source":  "**",
+                                        "headers":  [
+                                                        {
+                                                            "key":  "X-Content-Type-Options",
+                                                            "value":  "nosniff"
+                                                        },
+                                                        {
+                                                            "key":  "Referrer-Policy",
+                                                            "value":  "strict-origin-when-cross-origin"
+                                                        }
+                                                    ]
+                                    }
+                                ],
+                    "rewrites":  [
+                                     {
+                                         "destination":  "/index.html",
+                                         "source":  "**"
+                                     }
+                                 ]
+                }
+}

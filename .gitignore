@@ -1,2 +1,15 @@
-ownshop
+ownshop/
+node_modules/
+.next/
+dist/
+.firebase/
 .env
+.env.*
+!.env.example
+!**/.env.example
+*-debug.log
+test-results/
+playwright-report/
+artifacts/
+release/
+gha-creds-*.json

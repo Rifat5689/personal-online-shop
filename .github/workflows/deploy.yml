@@ -1,0 +1,57 @@
+name: Deploy isolated shop
+on:
+  workflow_run:
+    workflows: [Validate store and admin]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment environment (production is a manual launch)
+        type: choice
+        options: [testing, production]
+        default: testing
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: personalshop-${{ inputs.target }}
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: vars.DEPLOY_ENABLED == 'true' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') && (inputs.target != 'production' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target || 'testing' }}
+    timeout-minutes: 30
+    env:
+      AZURE_APP: ${{ inputs.target == 'production' && 'originsofbeauty' || 'test-originsofbeauty' }}
+      FIREBASE_PROJECT: ${{ inputs.target == 'production' && 'personalshop' || 'personalshop-test' }}
+      API_ORIGIN: ${{ inputs.target == 'production' && 'https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net' || 'https://test-originsofbeauty.azurewebsites.net' }}
+      VITE_API_URL: ${{ inputs.target == 'production' && 'https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net/api/v1' || 'https://test-originsofbeauty.azurewebsites.net/api/v1' }}
+      VITE_STOREFRONT_URL: ${{ inputs.target == 'production' && 'https://originsofbeauty.web.app' || 'https://test-originsofbeauty.web.app' }}
+      VITE_DEMO_MODE: ${{ inputs.target == 'production' && 'false' || 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm ci && npm ci --prefix backend && npm ci --prefix store
+      - run: python scripts/package-backend.py
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.AZURE_APP }}
+          publish-profile: ${{ inputs.target == 'production' && secrets.AZURE_PROFILE_PRODUCTION || secrets.AZURE_PROFILE_TEST }}
+          package: release/backend.zip
+      - run: npm run build
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/${{ inputs.target == 'production' && '520568253705' || '966768856635' }}/locations/global/workloadIdentityPools/github/providers/personalshop
+          service_account: personalshop-deploy@${{ env.FIREBASE_PROJECT }}.iam.gserviceaccount.com
+      - run: npm install -g firebase-tools@15.34.0
+      - name: Publish testing
+        if: inputs.target != 'production'
+        run: firebase deploy --only hosting --project personalshop-test --non-interactive
+      - name: Publish production
+        if: inputs.target == 'production'
+        run: firebase deploy --only hosting --project personalshop --config firebase.production.json --non-interactive

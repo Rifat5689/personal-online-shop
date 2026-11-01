@@ -1,0 +1,32 @@
+{
+    "hosting":  {
+                    "site":  "originsofbeauty",
+                    "public":  "store/dist",
+                    "ignore":  [
+                                   "**/.*",
+                                   "**/node_modules/**"
+                               ],
+                    "cleanUrls":  true,
+                    "headers":  [
+                                    {
+                                        "source":  "/secure/**",
+                                        "headers":  [
+                                                        {
+                                                            "key":  "Cache-Control",
+                                                            "value":  "no-store"
+                                                        },
+                                                        {
+                                                            "key":  "X-Robots-Tag",
+                                                            "value":  "noindex, nofollow"
+                                                        }
+                                                    ]
+                                    }
+                                ],
+                    "rewrites":  [
+                                     {
+                                         "destination":  "/index.html",
+                                         "source":  "**"
+                                     }
+                                 ]
+                }
+}

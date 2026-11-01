@@ -1,0 +1,40 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Origins of Beauty single-store backend",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "copy:origins": "node scripts/copy-origin-store.mjs",
+    "seed:demo": "node scripts/prepare-demo.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1147.0",
+    "@azure/identity": "^4.14.0",
+    "@azure/storage-blob": "^12.34.0",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.0.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.2.3",
+    "multer": "^2.4.0",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1"
+  },
+  "overrides": {
+    "@azure/identity": {
+      "@azure/msal-node": "^7.1.1"
+    }
+  }
+}

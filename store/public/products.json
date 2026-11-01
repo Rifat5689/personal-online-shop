@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "title": "Velvet Rose Serum",
+    "price": 4646,
+    "category": "Beauty",
+    "rating": 4.8,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 2,
+    "title": "Luxe Satin Lip Kit",
+    "price": 2996,
+    "category": "Beauty",
+    "rating": 4.6,
+    "image": "/images/lip-gloss.jpg"
+  },
+  {
+    "id": 3,
+    "title": "Silk Touch MoisturizerSilk Touch Moisturizer Silk Touch Moisturizer Silk Touch Moisturizer",
+    "price": 3667,
+    "category": "Skincare",
+    "rating": 4.7,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 4,
+    "title": "Noir Glow Palette",
+    "price": 5135,
+    "category": "Makeup",
+    "rating": 4.5,
+    "image": "/images/makeup-palette.jpg"
+  },
+  {
+    "id": 5,
+    "title": "Amber Mist Eau de Parfum",
+    "price": 7092,
+    "category": "Fragrance",
+    "rating": 4.9,
+    "image": "/images/perfume-bottle.jpg"
+  },
+  {
+    "id": 6,
+    "title": "Radiant Cleanser Foam",
+    "price": 2323,
+    "category": "Skincare",
+    "rating": 4.4,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 7,
+    "title": "Sculpted Brow Duo",
+    "price": 2262,
+    "category": "Makeup",
+    "rating": 4.3,
+    "image": "/images/makeup-brushes.jpg"
+  },
+  {
+    "id": 8,
+    "title": "Moonlit Body Lotion",
+    "price": 2568,
+    "category": "Bodycare",
+    "rating": 4.6,
+    "image": "/images/hand-cream.jpg"
+  },
+  {
+    "id": 9,
+    "title": "Soft Glow Highlighter",
+    "price": 3179,
+    "category": "Makeup",
+    "rating": 4.7,
+    "image": "/images/makeup-palette.jpg"
+  },
+  {
+    "id": 10,
+    "title": "Velour Hand Cream",
+    "price": 1712,
+    "category": "Bodycare",
+    "rating": 4.5,
+    "image": "/images/hand-cream.jpg"
+  },
+  {
+    "id": 11,
+    "title": "Rose Quartz Roller",
+    "price": 3913,
+    "category": "Tools",
+    "rating": 4.4,
+    "image": "/images/makeup-brushes.jpg"
+  },
+  {
+    "id": 12,
+    "title": "Midnight Eye Serum",
+    "price": 4157,
+    "category": "Skincare",
+    "rating": 4.6,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 13,
+    "title": "Glaze Lip Oil",
+    "price": 1956,
+    "category": "Beauty",
+    "rating": 4.7,
+    "image": "/images/lip-gloss.jpg"
+  },
+  {
+    "id": 14,
+    "title": "Featherlight Sunscreen",
+    "price": 2812,
+    "category": "Skincare",
+    "rating": 4.5,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 15,
+    "title": "Cedarwood Beard Balm",
+    "price": 2445,
+    "category": "Grooming",
+    "rating": 4.3,
+    "image": "/images/beard-oil-brush.jpg"
+  },
+  {
+    "id": 16,
+    "title": "Velvet Matte Foundation",
+    "price": 4402,
+    "category": "Makeup",
+    "rating": 4.6,
+    "image": "/images/beauty-makeup-display.jpg"
+  },
+  {
+    "id": 17,
+    "title": "Calm Night Diffuser",
+    "price": 4891,
+    "category": "Fragrance",
+    "rating": 4.8,
+    "image": "/images/perfume-bottle.jpg"
+  },
+  {
+    "id": 18,
+    "title": "Hydra Glow Mask",
+    "price": 3362,
+    "category": "Skincare",
+    "rating": 4.7,
+    "image": "/images/skincare-bottles.jpg"
+  },
+  {
+    "id": 19,
+    "title": "Signature Candle Set",
+    "price": 5869,
+    "category": "Home",
+    "rating": 4.8,
+    "image": "/images/candle.jpg"
+  },
+  {
+    "id": 20,
+    "title": "Contour Pro Brush",
+    "price": 2690,
+    "category": "Tools",
+    "rating": 4.4,
+    "image": "/images/makeup-brushes.jpg"
+  }
+]

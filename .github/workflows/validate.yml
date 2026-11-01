@@ -1,0 +1,37 @@
+name: Validate store and admin
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_ORIGIN: https://test-originsofbeauty.azurewebsites.net
+      VITE_API_URL: https://test-originsofbeauty.azurewebsites.net/api/v1
+      VITE_STOREFRONT_URL: https://test-originsofbeauty.web.app
+      VITE_DEMO_MODE: 'true'
+      TEST_API_URL: https://test-originsofbeauty.azurewebsites.net/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: 'store/package-lock.json'}
+      - run: npm ci && npm ci --prefix backend && npm ci --prefix store
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: node tests/serve.mjs > /tmp/personalshop-preview.log 2>&1 &
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verification
+          path: |
+            playwright-report/
+            artifacts/
+      - uses: actions/upload-artifact@v4
+        with: {name: test-store, path: store/dist/}

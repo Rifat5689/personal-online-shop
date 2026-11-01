@@ -1,0 +1,20 @@
+.card-reset-surface { position: relative; overflow: visible !important; }
+.card-reset-control { position: absolute; top: 8px; right: 8px; z-index: 5; }
+.card-reset-trigger { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #e3e7ec; border-radius: 7px; background: #fff; color: #64748b; font-size: 19px; opacity: 0; transition: opacity .15s ease; cursor: pointer; }
+.card-reset-surface:hover > .card-reset-control .card-reset-trigger, .card-reset-surface:focus-within > .card-reset-control .card-reset-trigger, .card-reset-control.is-open .card-reset-trigger { opacity: 1; }
+.card-reset-trigger:focus-visible { outline: 2px solid #64748b; outline-offset: 2px; }
+.card-reset-trigger:disabled { cursor: wait; }
+.card-reset-menu { position: fixed; z-index: 1500; width: 220px; max-width: calc(100vw - 24px); padding: 6px; background: #fff; border: 1px solid #e3e7ec; border-radius: 9px; box-shadow: 0 8px 25px #172b4d1c; color: #334155; text-align: left; }
+.card-reset-menu button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px; border: 0; border-radius: 5px; background: transparent; color: #334155; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.card-reset-menu button:hover, .card-reset-menu button:focus-visible { background: #f1f5f9; }
+.card-reset-menu p, .card-reset-menu small { display: block; margin: 6px 10px; font-size: 11px; line-height: 1.5; color: #64748b; }
+.card-reset-error { position: absolute; right: 0; top: 36px; min-width: 180px; background: white; color: #b91c1c; padding: 10px; border: 1px solid #fecaca; border-radius: 6px; font-size: 12px; }
+.card-reset-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.card-reset-surface > .analytics-section-heading, .card-reset-surface > .store-reference-heading { padding-right: 24px; }
+.card-reset-surface.stat-card > .stat-card-info { padding-right: 20px; }
+.card-reset-surface > .stat-card-wave { border-radius: inherit; }
+@media (hover: none), (pointer: coarse) {
+  .card-reset-control { top: 0; right: 0; }
+  .card-reset-trigger { opacity: 1; width: 34px; height: 32px; border: 0; background: transparent; font-size: 17px; }
+  .stats-grid .card-reset-surface.stat-card > .stat-card-info { padding-right: 0; }
+}

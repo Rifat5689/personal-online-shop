@@ -1,0 +1,72 @@
+/* Hand-finished mixed palettes. Existing Pink, Green and Blue remain untouched. */
+.ob-store[data-store-theme="midnight"] {
+  --ob-ink: #17243b;
+  --ob-plum: #17243b;
+  --ob-rose: #88652b;
+  --ob-muted: #706b60;
+  --ob-line: #e8dfce;
+  --ob-wash: #faf8f2;
+  background: #faf8f2;
+  color: #17243b;
+}
+.ob-store[data-store-theme="midnight"] :is(.ob-header, .ob-nav, .ob-mobile-page-header) {
+  background: #14233d;
+  border-color: #c8a96835;
+}
+.ob-store[data-store-theme="midnight"] .ob-header :is(.ob-brand strong, .ob-brand em, .ob-menu-button, .ob-cart-link, .ob-mobile-page-header a, .ob-mobile-page-header h1, .ob-desktop-nav button) { color: #f3e6c8; }
+.ob-store[data-store-theme="midnight"] .ob-header .ob-brand > span { background: #f6f0e4; color: #72541f; border-color: #d8c59d; }
+.ob-store[data-store-theme="midnight"] .ob-cart-link b { background: #d9bb79; color: #14233d; }
+.ob-store[data-store-theme="midnight"] .ob-hero { background: radial-gradient(ellipse at 82% 15%, #4e493a 0%, transparent 55%), linear-gradient(125deg, #12213b, #253751); border-color: #d8c59d55; }
+.ob-store[data-store-theme="midnight"] .ob-hero h1 { color: #fff7e8; }
+.ob-store[data-store-theme="midnight"] .ob-hero p { color: #e0e4eb; }
+.ob-store[data-store-theme="midnight"] .ob-hero .ob-kicker { color: #e2c586; }
+.ob-store[data-store-theme="midnight"] .ob-hero-visual { background: linear-gradient(145deg, #ece0c5, #c9b58c); }
+.ob-store[data-store-theme="midnight"] :is(.btn-primary, .ob-primary, .ob-add-button, .ob-buy-button, .ob-auth-submit-btn) { background: linear-gradient(115deg, #182942, #30445d); color: #fff5df; border-color: #ad9157; box-shadow: 0 4px 12px #14233d14; }
+.ob-store[data-store-theme="midnight"] :is(.btn-primary, .ob-primary, .ob-add-button, .ob-buy-button, .ob-auth-submit-btn):hover:not(:disabled) { background: linear-gradient(115deg, #223752, #3d526d); }
+.ob-store[data-store-theme="midnight"] .ob-hero .ob-primary { background: linear-gradient(110deg, #eddaa8, #d6b674); color: #14233d !important; border-color: #eddaa8; box-shadow: 0 5px 20px #00000015; }
+.ob-store[data-store-theme="midnight"] .ob-hero .ob-primary:hover { background: #f4e3b8; }
+.ob-store[data-store-theme="midnight"] .ob-category-pills a.active { background: #172b46; color: #fff5df; border-color: #172b46; }
+.ob-store[data-store-theme="midnight"] :is(.discount, .ob-auth-badge) { background: #e6cd95; color: #17243b; }
+.ob-store[data-store-theme="midnight"] .ob-category-tile { background: linear-gradient(120deg, #f6f0e3, #e9ddc4); }
+.ob-store[data-store-theme="midnight"] .ob-home-benefits svg { background: #f5ecd8; color: #88652b; }
+.ob-store[data-store-theme="midnight"] .ob-footer { background: #14233d; color: #ece6da; border-color: #c8a96835; }
+.ob-store[data-store-theme="midnight"] .ob-footer :is(strong, p, a, small, em, .ob-footer-delivery) { color: #ece6da; }
+.ob-store[data-store-theme="midnight"] .ob-footer .ob-brand > span { color: #72541f; background: #f6f0e4; }
+.ob-store[data-store-theme="midnight"] .ob-bottom-nav { background: #14233d !important; border-color: #c8a96835 !important; box-shadow: 0 -4px 24px #14233d15 !important; }
+.ob-store[data-store-theme="midnight"] .ob-bottom-nav :is(a, button) { color: #b9c5d5 !important; }
+.ob-store[data-store-theme="midnight"] .ob-bottom-nav :is(a.active, button.active) { color: #edcf8c !important; }
+.ob-store[data-store-theme="midnight"] :is(button, a, input, select, textarea):focus-visible { outline-color: #a27c37; }
+.ob-store[data-store-theme="midnight"] .ob-slider-dots button.active { background: #edcf8c; }
+
+.ob-store[data-store-theme="aurora"] {
+  --ob-ink: #28213e;
+  --ob-plum: #65429a;
+  --ob-rose: #087a75;
+  --ob-muted: #656878;
+  --ob-line: #dce7ea;
+  --ob-wash: #f8fbfc;
+  background: radial-gradient(ellipse at 0% 8%, #e8f6f3 0%, transparent 45%), radial-gradient(ellipse at 100% 55%, #f0ebfa 0%, transparent 45%), #fafcfd;
+  color: #28213e;
+}
+.ob-store[data-store-theme="aurora"] :is(.ob-header, .ob-mobile-page-header) { background: #fcfbffed; border-color: #e5dff1; }
+.ob-store[data-store-theme="aurora"] .ob-header .ob-brand > span { background: linear-gradient(140deg, #e1f4ef, #eee5fb); color: #65429a; border-color: #d9e6e7; }
+.ob-store[data-store-theme="aurora"] .ob-brand strong { color: #40325e; }
+.ob-store[data-store-theme="aurora"] .ob-brand em { color: #087a75; }
+.ob-store[data-store-theme="aurora"] .ob-hero { background: radial-gradient(ellipse at 0% 0%, #d4efeb 0%, transparent 65%), linear-gradient(120deg, #f2faf8, #e9ddf6); border-color: #dcd9ed; }
+.ob-store[data-store-theme="aurora"] .ob-hero h1 { color: #463264; }
+.ob-store[data-store-theme="aurora"] .ob-hero p { color: #5c596e; }
+.ob-store[data-store-theme="aurora"] .ob-hero .ob-kicker { color: #086f6a; }
+.ob-store[data-store-theme="aurora"] .ob-hero-visual { background: linear-gradient(145deg, #ceeae6, #dfd2f0); }
+.ob-store[data-store-theme="aurora"] :is(.btn-primary, .ob-primary, .ob-add-button, .ob-buy-button, .ob-auth-submit-btn) { background: linear-gradient(110deg, #086f6a, #6250a0); color: #fff; border-color: #427b87; box-shadow: 0 4px 13px #54518a19; }
+.ob-store[data-store-theme="aurora"] :is(.btn-primary, .ob-primary, .ob-add-button, .ob-buy-button, .ob-auth-submit-btn):hover:not(:disabled) { background: linear-gradient(110deg, #075f5b, #53418f); }
+.ob-store[data-store-theme="aurora"] .ob-category-pills a.active { background: linear-gradient(115deg, #086f6a, #6250a0); color: #fff; border-color: #437c87; }
+.ob-store[data-store-theme="aurora"] .discount { background: #65429a; color: #fff; }
+.ob-store[data-store-theme="aurora"] .ob-category-tile { background: linear-gradient(115deg, #e8f5f0, #ede5f8); }
+.ob-store[data-store-theme="aurora"] .ob-home-benefits svg { background: #e5f2ee; color: #087a75; }
+.ob-store[data-store-theme="aurora"] .ob-home-benefits > div:nth-child(even) svg { background: #eee7f7; color: #65429a; }
+.ob-store[data-store-theme="aurora"] .ob-bottom-nav { background: #fffffff5 !important; border-color: #e2dbef !important; box-shadow: 0 -4px 24px #65429a0d !important; }
+.ob-store[data-store-theme="aurora"] .ob-bottom-nav :is(a.active, button.active) { color: #65429a !important; }
+.ob-store[data-store-theme="aurora"] .ob-cart-link b { background: #65429a; color: #fff; }
+.ob-store[data-store-theme="aurora"] .ob-footer { background: linear-gradient(120deg, #eaf4f1, #eee8f6); border-color: #ded8ea; }
+.ob-store[data-store-theme="aurora"] :is(button, a, input, select, textarea):focus-visible { outline-color: #65429a; }
+.ob-store[data-store-theme="aurora"] .ob-slider-dots button.active { background: #65429a; }

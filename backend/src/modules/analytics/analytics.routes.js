@@ -1,0 +1,14 @@
+import { requireAnalytics } from "../subscription/subscription.middleware.js";
+import { liveTicket } from "./live.controller.js";
+import { Router } from "express";
+import { rateLimit } from "express-rate-limit";
+import { clientKey } from "../../utils/clientIp.js";
+import { verifyJwt } from "../../middlewares/auth.middleware.js";
+import { requireRoles, requireTenant, resolveStore } from "../../middlewares/tenant.middleware.js";
+import { recordEvent, getAnalytics } from "./analytics.controller.js";
+const router = Router();
+router.post("/store/:storeSlug/events", rateLimit({ keyGenerator: clientKey, windowMs: 60000, limit: 120, standardHeaders: "draft-8", legacyHeaders: false }), resolveStore, recordEvent);
+router.post("/store/:storeSlug/live-ticket", rateLimit({ keyGenerator: clientKey, windowMs: 60000, limit: 60, standardHeaders: "draft-8", legacyHeaders: false }), resolveStore, liveTicket);
+router.post("/live-ticket", rateLimit({ keyGenerator: clientKey, windowMs: 60000, limit: 60, standardHeaders: "draft-8", legacyHeaders: false }), verifyJwt, requireRoles("ADMIN", "ECO", "SUPER_ADMIN"), requireTenant, requireAnalytics, liveTicket);
+router.get("/", verifyJwt, requireRoles("ADMIN", "ECO", "SUPER_ADMIN"), requireTenant, requireAnalytics, getAnalytics);
+export { router as analyticsRouter };

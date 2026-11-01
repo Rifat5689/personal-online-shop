@@ -1,0 +1,1 @@
+{"name":"personalshop","private":true,"type":"module","scripts":{"dev:store":"npm run dev --prefix store","dev:backend":"npm run dev --prefix backend","build":"npm run build --prefix store","test":"node --test tests/*.test.mjs","test:browser":"playwright test"},"devDependencies":{"@playwright/test":"^1.56.0"}}
