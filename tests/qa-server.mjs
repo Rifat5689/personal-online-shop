@@ -1,0 +1,25 @@
+// Candidate-code tests use a disposable replica set, never the hosted database.
+import {MongoMemoryReplSet} from 'mongodb-memory-server';
+import mongoose from '../backend/node_modules/mongoose/index.js';
+import Store from '../backend/src/modules/store/store.model.js';
+import User from '../backend/src/modules/user/user.model.js';
+import Category from '../backend/src/modules/category/category.model.js';
+import Product from '../backend/src/modules/product/product.model.js';
+import Order from '../backend/src/modules/order/order.model.js';
+process.env.NODE_ENV='test';
+process.env.ACCESS_TOKEN_SECRET='isolated-qa-access-secret-never-use-in-production';
+process.env.REFRESH_TOKEN_SECRET='isolated-qa-refresh-secret-never-use-in-production';
+process.env.CORS_ORIGIN='http://localhost:3001,http://127.0.0.1:3001';
+process.env.STORE_SLUG='originsofbeauty';
+const database=await MongoMemoryReplSet.create({replSet:{count:1},binary:{version:'7.0.14'}});
+await mongoose.connect(database.getUri());
+await Promise.all([Store.init(),User.init(),Category.init(),Product.init(),Order.init()]);
+const store=await Store.create({name:'Origins of Beauty',slug:'originsofbeauty',analyticsAccess:'allow',themeAccess:'allow'});
+for(const username of ['origins','demouser'])await User.create({username,email:`${username}@example.test`,password:'123456',role:'ADMIN',tenantId:store._id});
+const category=await Category.create({name:'Beauty',slug:'beauty',tenantId:store._id});
+await Product.insertMany(Array.from({length:50},(_,i)=>({name:`Catalog product ${i+1}`,slug:`catalog-product-${i+1}`,price:100+i,stock:25,isActive:true,tenantId:store._id,category:i%2?category._id:null})));
+const{app}=await import('../backend/src/app.js');
+const{attachLiveAnalytics}=await import('../backend/src/modules/analytics/live.server.js');
+const server=app.listen(5001,()=>console.log('Disposable test API ready on http://127.0.0.1:5001/api/v1/health'));
+const stopLive=attachLiveAnalytics(server);
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{stopLive();server.close();server.closeAllConnections();await mongoose.disconnect();await database.stop();process.exit(0);});

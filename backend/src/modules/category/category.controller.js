@@ -3,6 +3,7 @@ import { ApiResponse } from "../../utils/ApiResponse.js";
 import { asyncHandler } from "../../utils/asyncHandler.js";
 import Category from "./category.model.js";
 import Product from "../product/product.model.js";
+import mongoose from "mongoose";
 import { uploadProductImage, deleteCategoryImage } from "../../services/product-images.service.js";
 const listCategories = asyncHandler(async (req, res) => {
   const categories = await Category.find({ tenantId: req.store._id, resetId: null }).sort({ name: 1 }).lean();
@@ -66,17 +67,27 @@ const updateCategory = asyncHandler(async (req, res) => {
   return res.json(new ApiResponse(200, category, "Category updated"));
 });
 const deleteCategory = asyncHandler(async (req, res) => {
-  if (
-    await Product.exists({ category: req.params.id, tenantId: req.store._id })
-  )
-    throw new ApiError(409, "Remove this category from its products first");
-  const category = await Category.findOneAndDelete({
-    _id: req.params.id,
-    tenantId: req.store._id,
-    resetId: null,
-  });
-  if (!category) throw new ApiError(404, "Category not found");
+  const session = await mongoose.startSession();
+  let category;
+  let updatedProducts = 0;
+  try {
+    await session.withTransaction(async () => {
+      category = await Category.findOne({
+        _id: req.params.id, tenantId: req.store._id, resetId: null,
+      }).session(session);
+      if (!category) throw new ApiError(404, "Category not found");
+      const result = await Product.updateMany(
+        { category: category._id, tenantId: req.store._id },
+        { $set: { category: null } },
+        { session },
+      );
+      updatedProducts = result.modifiedCount;
+      await Category.deleteOne({ _id: category._id, tenantId: req.store._id }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
   await deleteCategoryImage(category.image, req.store._id).catch(() => {});
-  return res.json(new ApiResponse(200, null, "Category deleted"));
+  return res.json(new ApiResponse(200, { updatedProducts }, "Category deleted. Products kept with no category."));
 });
 export { listCategories, createCategory, updateCategory, deleteCategory };

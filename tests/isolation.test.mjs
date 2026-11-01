@@ -1,6 +1,29 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 const base=process.env.TEST_API_URL||'http://localhost:5000/api/v1';
+test('deleting a populated category keeps its products and makes category optional',async()=>{
+ const session=(await(await fetch(base+'/users/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'demouser',password:'123456'})})).json()).data;
+ const headers={Authorization:`Bearer ${session.accessToken}`,'Content-Type':'application/json'};
+ const call=(path,method='GET',body)=>fetch(base+path,{method,headers,...(body?{body:JSON.stringify(body)}:{})});
+ const category=(await(await call('/categories','POST',{name:'QA category '+randomUUID()})).json()).data;
+ const created=[];
+ try{
+  for(const selection of [category._id,category._id,'',null,undefined]){
+   const response=await call('/products','POST',{name:'QA temporary product '+randomUUID(),price:12,stock:2,isActive:false,category:selection});
+   assert.equal(response.status,201);const product=(await response.json()).data;created.push(product);
+   assert.equal(product.category,selection||null);
+  }
+  const deleted=await call('/categories/'+category._id,'DELETE');assert.equal(deleted.status,200);
+  assert.equal((await deleted.json()).data.updatedProducts,2);
+  for(const product of created){const current=(await(await call('/products/'+product._id)).json()).data;assert.equal(current._id,product._id);assert.equal(current.category,null);assert.equal(current.stock,2);}
+  const invalid=await call('/products/'+created[0]._id,'PATCH',{category:category._id});assert.equal(invalid.status,400);
+  const edited=await call('/products/'+created[0]._id,'PATCH',{category:''});assert.equal(edited.status,200);assert.equal((await edited.json()).data.category,null);
+  assert.equal((await call('/categories/'+category._id,'DELETE')).status,404);
+ }finally{
+  for(const product of created)await call('/products/'+product._id,'DELETE');
+  await call('/categories/'+category._id,'DELETE');
+ }
+});
 test('public API isolates the store and rejects platform and admin management',async()=>{
  for(const route of ['/products/store/other-shop','/stores/slug/other-shop','/platform','/subscriptions','/users/admins','/stores/public'])assert.equal((await fetch(base+route)).status,404,route);
  assert.equal((await fetch(base+'/products')).status,401);

@@ -138,7 +138,7 @@ export default function Categories() {
                         <button type="button" className="catalog-icon-button danger" aria-label={`Delete ${category.name}`} title={t("Delete category")} disabled={hook.mutation.isPending} onClick={() => {
                       confirm({
                         title: "Delete category?",
-                        message: `Delete "${category.name}"? This cannot be undone.`,
+                        message: `Delete "${category.name}"? Its products will be kept and moved to No Category. This cannot be undone.`,
                         onConfirm: () => hook.mutation.mutate({
                           method: "delete",
                           id: category._id

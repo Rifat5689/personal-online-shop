@@ -118,7 +118,7 @@ const createProduct = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Name and price are required");
   await validateProduct(req.body, req.store._id);
   const data = pick(req.body);
-  if (!data.category) delete data.category;
+  if (!data.category) data.category = null;
   data.images = (data.images || []).map((image, index) => ({
     url: image.url,
     public_id: image.public_id || `external-${index}`,

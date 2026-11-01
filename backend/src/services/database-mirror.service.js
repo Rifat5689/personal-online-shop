@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 import { createHash, randomUUID } from "node:crypto";
 
 const { MongoClient, BSON } = mongoose.mongo;
-const STATE = "_ownshop_mirror_state";
-const OWNED = "_ownshop_mirror_documents";
-const ARCHIVE = "_ownshop_mirror_conflicts";
+const STATE = "_personalshop_mirror_state";
+const OWNED = "_personalshop_mirror_documents";
+const ARCHIVE = "_personalshop_mirror_conflicts";
 const ID = "production-to-test";
 const digest = (value) => createHash("sha256").update(BSON.EJSON.stringify(value, { relaxed: false })).digest("hex");
 const ownedId = (collection, id) => digest({ collection, id });

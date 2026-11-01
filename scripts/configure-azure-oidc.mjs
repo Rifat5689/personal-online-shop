@@ -11,11 +11,13 @@ const app=matches[0]||az(['ad','app','create','--display-name',name,'--sign-in-a
 let principal=az(['ad','sp','list','--filter',`"appId eq '${app.appId}'"`])[0];
 if(!principal)principal=az(['ad','sp','create','--id',app.appId]);
 const existing=az(['ad','app','federated-credential','list','--id',app.id]);
+const repository=command('gh.exe',['api',`repos/${repo}`]);
+const immutableRepo=`${repository.owner.login}@${repository.owner.id}/${repository.name}@${repository.id}`;
 for(const environment of ['testing','production']){
- const subject=`repo:${repo}:environment:${environment}`;
+ const subject=`repo:${immutableRepo}:environment:${environment}`;
  if(existing.some(c=>c.subject===subject&&c.issuer==='https://token.actions.githubusercontent.com'))continue;
  const folder=fs.mkdtempSync(path.join(os.tmpdir(),'personalshop-oidc-'));const file=path.join(folder,'credential.json');
- try{fs.writeFileSync(file,JSON.stringify({name:`github-${environment}`,issuer:'https://token.actions.githubusercontent.com',subject,audiences:['api://AzureADTokenExchange']}));az(['ad','app','federated-credential','create','--id',app.id,'--parameters','@'+file]);}finally{fs.unlinkSync(file);fs.rmdirSync(folder);}
+ try{fs.writeFileSync(file,JSON.stringify({name:`github-${environment}`,issuer:'https://token.actions.githubusercontent.com',subject,audiences:['api://AzureADTokenExchange']}));const previous=existing.find(c=>c.name===`github-${environment}`);az(['ad','app','federated-credential',previous?'update':'create','--id',app.id,...(previous?['--federated-credential-id',previous.id]:[]),'--parameters','@'+file]);}finally{fs.unlinkSync(file);fs.rmdirSync(folder);}
 }
 for(const name of ['test-originsofbeauty','originsofbeauty']){
  const scope=`/subscriptions/${account.id}/resourceGroups/encrypts_group/providers/Microsoft.Web/sites/${name}`;
