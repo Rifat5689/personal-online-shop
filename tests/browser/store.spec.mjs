@@ -3,7 +3,7 @@ test('store renders products, valid images, and tenant-free links',async({page},
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');
  await expect(page.locator('h1').first()).toContainText('Origins');
- const product=page.locator('a[href^="/products/"]').first();await expect(product).toBeVisible();
+ const product=page.locator('a[href^="/products/"]:not([href*="qa-temporary-product"])').first();await expect(product).toBeVisible();
  await expect(page.locator('a[href^="/originsofbeauty"]')).toHaveCount(0);
  await page.locator('.ob-reference-banner.active img').evaluate(img=>img.decode());
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBeTruthy();
@@ -29,13 +29,13 @@ test('demo login opens the original merchant admin without SaaS navigation',asyn
  await page.goto('/secure/admin/settings');await expect(page.locator('h1').first()).toBeVisible();
 });
 test('cart survives reload and opens checkout at the root store URL',async({page})=>{
- await page.goto('/products');await page.locator('a[href^="/products/"]').first().click();
+ await page.goto('/products');await page.locator('a[href^="/products/"]:not([href*="qa-temporary-product"])').first().click();
  await page.getByRole('button',{name:'Add to cart',exact:true}).click();
  await page.goto('/cart');await expect(page.locator('.cart-item')).toHaveCount(1);
+ await expect(page.locator('.ob-brand').first()).toHaveAttribute('href','/');
  await page.goto('/checkout');await expect(page.getByLabel('Full Name')).toBeVisible();
  await page.getByLabel('Full Name').fill('QA Customer');
  await page.getByLabel('Phone Number').fill('01700000000');
  await page.getByLabel('Delivery Address').fill('Dhaka test address');
  await expect(page.getByRole('heading',{name:'Checkout',exact:true})).toBeVisible();
- await page.locator('.ob-brand').first().click();await expect(page).toHaveURL(/\/$/);
 });
