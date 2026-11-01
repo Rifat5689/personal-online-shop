@@ -15,7 +15,7 @@ permissions:
   contents: read
   id-token: write
 concurrency:
-  group: personalshop-${{ inputs.target }}
+  group: personalshop-${{ inputs.target || 'testing' }}
   cancel-in-progress: false
 jobs:
   deploy:
@@ -24,6 +24,7 @@ jobs:
     environment: ${{ inputs.target || 'testing' }}
     timeout-minutes: 30
     env:
+      RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
       AZURE_APP: ${{ inputs.target == 'production' && 'originsofbeauty' || 'test-originsofbeauty' }}
       FIREBASE_PROJECT: ${{ inputs.target == 'production' && 'personalshop' || 'personalshop-test' }}
       API_ORIGIN: ${{ inputs.target == 'production' && 'https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net' || 'https://test-originsofbeauty.azurewebsites.net' }}
@@ -44,12 +45,19 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      - uses: azure/webapps-deploy@v3
+      - uses: actions/upload-artifact@v4
         with:
-          app-name: ${{ env.AZURE_APP }}
-          package: release/backend.zip
+          name: backend-${{ inputs.target || 'testing' }}
+          path: release/backend.zip
+      - name: Deploy prebuilt backend
+        run: az webapp deploy --resource-group encrypts_group --name "$AZURE_APP" --src-path release/backend.zip --type zip --async true --track-status false --enable-kudu-warmup false --timeout 180000 --only-show-errors --output none
       - name: Wait for backend readiness
-        run: curl --fail --retry 15 --retry-delay 5 --retry-connrefused "$API_ORIGIN/api/v1/health"
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --max-time 10 "$API_ORIGIN/api/v1/health" | python -c 'import json,os,sys; data=json.load(sys.stdin)["data"]; sys.exit(0 if data["release"]==os.environ["RELEASE_COMMIT"] else 1)'; then exit 0; fi
+            sleep 5
+          done
+          exit 1
       - run: npm run build
       - uses: google-github-actions/auth@v2
         with:
