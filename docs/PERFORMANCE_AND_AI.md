@@ -70,6 +70,8 @@ npx playwright test
 
 CLI deployment first publishes the testing candidate. GitHub Actions validates candidate code before testing deployment; production deployment is explicitly dispatched from main. Dependency download caches include backend/store locks, and deployment installs production backend dependencies only. Release health must match the packaged commit before frontend publication. Never overlap CLI and Actions deployment on the same Azure app: the previous failed release encountered a Kudu deployment-lock conflict.
 
+Production deployment exposed a missing Oryx extraction manifest: code was updated but a fresh runtime could not load its runtime-local dependencies. Packaging now includes one `node_modules.tar.gz` plus `oryx-manifest.toml` with `CompressedNodeModulesFile`, instead of thousands of individual files. Oryx extracts dependencies into local container storage at startup. The real package was inspected for the manifest, expected modules, and absence of environment files; it contained 72 outer entries instead of over 16,000. Existing startup metadata was repaired to restore production while the permanent packaging change was prepared.
+
 ## Maintenance
 
 Use versioned filenames when replacing long-cached assets. After catalog changes, manually dispatch the preview refresh if an hourly update is too slow. Verify a product's HTML using View Source, then request a re-scrape through the social platform's sharing debugger if an old preview persists. Avoid storing secrets in URLs, logs, git or the learning PDF. Keep third-party provider errors visible and check actual generation instead of trusting a green model-list connection badge.

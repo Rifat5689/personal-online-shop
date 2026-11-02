@@ -4,6 +4,8 @@ import os
 import json
 import subprocess
 import zipfile
+import tarfile
+import io
 root = Path(__file__).resolve().parent.parent
 output = root / 'release' / 'backend.zip'
 output.parent.mkdir(exist_ok=True)
@@ -17,7 +19,24 @@ with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
     for name in ['server.js', 'package.json', 'package-lock.json']:
         archive.write(root / 'backend' / name, name)
     if '--with-dependencies' in sys.argv:
-        for file in (root / 'backend' / 'node_modules').rglob('*'):
-            if file.is_file():
-                archive.write(file, file.relative_to(root / 'backend'))
+        # Ship one dependency archive plus Oryx's extraction manifest. Shipping
+        # individual files lets OneDeploy remove the old manifest while retaining
+        # a runtime-local node_modules symlink, leaving cold starts without modules.
+        dependencies = root / 'release' / 'node_modules.tar.gz'
+        with tarfile.open(dependencies, 'w:gz', compresslevel=3) as bundle:
+            if '--dependencies-zip' in sys.argv:
+                source_path = sys.argv[sys.argv.index('--dependencies-zip') + 1]
+                with zipfile.ZipFile(source_path) as source:
+                    for item in source.infolist():
+                        if not item.filename.startswith('node_modules/') or item.is_dir():
+                            continue
+                        data = source.read(item.filename)
+                        entry = tarfile.TarInfo(item.filename.removeprefix('node_modules/'))
+                        entry.size = len(data)
+                        entry.mode = (item.external_attr >> 16) & 0o777 or 0o644
+                        bundle.addfile(entry, io.BytesIO(data))
+            else:
+                bundle.add(root / 'backend' / 'node_modules', arcname='.')
+        archive.write(dependencies, 'node_modules.tar.gz', compress_type=zipfile.ZIP_STORED)
+        archive.writestr('oryx-manifest.toml', 'OperationId = "personalshop-prebuilt"\nCompressedNodeModulesFile = "node_modules.tar.gz"\n')
 print('Packaged backend without credentials; production dependencies included:', '--with-dependencies' in sys.argv)
