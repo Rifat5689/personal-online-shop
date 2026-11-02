@@ -1,4 +1,6 @@
 import { attachLiveAnalytics } from "./src/modules/analytics/live.server.js";
+import { attachWhatsAppLive } from "./src/modules/whatsapp/whatsapp.live.js";
+import { startAIWorker } from "./src/modules/whatsapp/whatsapp.ai.worker.js";
 import "dotenv/config";
 import connectDB from "./src/config/db.js";
 import { app } from "./src/app.js";
@@ -14,11 +16,15 @@ const server = app.listen(port, (error) => {
 });
 
 const stopLiveAnalytics = attachLiveAnalytics(server);
+const stopWhatsAppLive = attachWhatsAppLive(server);
+const stopAIWorker = startAIWorker();
 let shuttingDown = false;
 const shutdown = async (exitCode = 0) => {
   if (shuttingDown) return;
   shuttingDown = true;
   stopLiveAnalytics();
+  stopWhatsAppLive();
+  stopAIWorker();
   const deadline = setTimeout(() => process.exit(exitCode || 1), 10000);
   deadline.unref();
   await new Promise((resolve) => server.close(resolve));

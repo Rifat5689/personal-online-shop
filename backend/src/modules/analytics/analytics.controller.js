@@ -14,11 +14,12 @@ export const recordEvent = asyncHandler(async (req, res) => {
   if (body.type === "engagement" && (!Number.isInteger(body.seconds) || body.seconds < 1 || body.seconds > 60)) throw new ApiError(400, "Invalid engagement duration");
   const pages = ["home", "products", "product", "category", "cart", "checkout", "orders", "account", "auth", "other"];
   const source = typeof body.source === "string" && /^(Direct|[a-z0-9.-]{1,100})$/i.test(body.source) ? body.source : "Direct";
-  await Event.updateOne({ tenantId: req.store._id, eventId: body.eventId }, { $setOnInsert: {
+  const recorded = await Event.updateOne({ tenantId: req.store._id, eventId: body.eventId }, { $setOnInsert: {
     tenantId: req.store._id, eventId: body.eventId, sessionId: body.sessionId, type: body.type,
     productId: productType ? body.productId : null, page: pages.includes(body.page) ? body.page : "other",
     source, device: ["mobile", "tablet", "desktop"].includes(body.device) ? body.device : "desktop", seconds: body.type === "engagement" ? body.seconds : 0,
   } }, { upsert: true });
+  if (recorded.upsertedCount && body.type === 'product_view') await Product.updateOne({ _id: body.productId, tenantId: req.store._id }, { $inc: { totalViews: 1 } });
   return res.status(201).json(new ApiResponse(201, { recorded: true }, "Event recorded"));
 });
 export const getAnalytics = asyncHandler(async (req, res) => res.json(new ApiResponse(200, await buildAnalytics(req.store._id, analyticsRange(req.query)), "Analytics fetched")));

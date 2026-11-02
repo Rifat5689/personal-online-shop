@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-export function PageMetadata({ title, description = "", image, noindex = false }) {
+export function PageMetadata({ title, description = "", image, noindex = false, type = 'website' }) {
   useEffect(() => {
     if (!title) return;
     const previousTitle = document.title;
@@ -21,6 +21,7 @@ export function PageMetadata({ title, description = "", image, noindex = false }
     };
     update("name", "description", description);
     update("property", "og:title", title);
+    update("property", "og:type", type);
     update("property", "og:description", description);
     update("property", "og:image", image || "");
     update("property", "og:url", window.location.origin + window.location.pathname);
@@ -44,6 +45,6 @@ export function PageMetadata({ title, description = "", image, noindex = false }
       if (existed) canonical.setAttribute("href", previousUrl || "");
       else canonical.remove();
     };
-  }, [title, description, image, noindex]);
+  }, [title, description, image, noindex, type]);
   return null;
 }

@@ -22,4 +22,6 @@ const{app}=await import('../backend/src/app.js');
 const{attachLiveAnalytics}=await import('../backend/src/modules/analytics/live.server.js');
 const server=app.listen(5001,()=>console.log('Disposable test API ready on http://127.0.0.1:5001/api/v1/health'));
 const stopLive=attachLiveAnalytics(server);
-for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{stopLive();server.close();server.closeAllConnections();await mongoose.disconnect();await database.stop();process.exit(0);});
+const {attachWhatsAppLive}=await import('../backend/src/modules/whatsapp/whatsapp.live.js');
+const stopChat=attachWhatsAppLive(server);
+for(const signal of ['SIGINT','SIGTERM'])process.on(signal,async()=>{stopChat();stopLive();server.close();server.closeAllConnections();await mongoose.disconnect();await database.stop();process.exit(0);});

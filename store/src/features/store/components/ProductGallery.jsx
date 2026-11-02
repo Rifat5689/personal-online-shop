@@ -8,7 +8,7 @@ function GallerySlide({ image, name, active, index }) {
     <div className={`ob-gallery-slide${active ? " active" : ""}`} aria-hidden={!active}>
       {status === "loading" && active && <span className="ob-gallery-loading" role="status"><span className="spinner" aria-hidden="true" /><span className="sr-only">Loading product photo</span></span>}
       {status === "error" ? <div className="image-placeholder">Photo unavailable</div> : (
-        <img src={image.url} alt={active ? `${name}, photo ${index + 1}` : ""} loading="eager" onLoad={() => setStatus("loaded")} onError={() => setStatus("error")} />
+        <img src={image.url} alt={active ? `${name}, photo ${index + 1}` : ""} loading={active ? "eager" : "lazy"} fetchPriority={active ? "high" : "low"} decoding="async" width="800" height="800" onLoad={() => setStatus("loaded")} onError={() => setStatus("error")} />
       )}
     </div>
   );

@@ -15,7 +15,7 @@ test("one-way database mirror preserves production isolation, resumes writes and
   const client = new MongoClient(cluster.getUri());
   await client.connect();
   const source = client.db("production"), target = client.db("testing");
-  const collections = ["users", "products", "orders", "customers"];
+    const collections = ["users", "products", "orders", "customers", "whatsappconversations", "whatsappmessages", "whatsappreceipts"];
   const workers = [];
   const create = (options = {}) => {
     const status = {};
@@ -58,6 +58,18 @@ test("one-way database mirror preserves production isolation, resumes writes and
     await until(async () => (await target.collection("products").findOne({ _id: "product" }))?.stock === 8);
     await target.collection("products").updateOne({ _id: "product" }, { $set: { stock: 500 } });
     assert.equal((await source.collection("products").findOne({ _id: "product" })).stock, 8);
+
+    // One production webhook record supplies both inboxes; replies and receipts
+    // written in production stream to testing without another webhook write.
+    await source.collection("whatsappconversations").insertOne({ _id: "wa-chat", phone: "8801700000000" });
+    await source.collection("whatsappmessages").insertOne({ _id: "wa-in", conversation: "wa-chat", metaId: "wamid.in", direction: "inbound", text: "Customer message" });
+    await source.collection("whatsappmessages").insertOne({ _id: "wa-out", conversation: "wa-chat", metaId: "wamid.out", direction: "outbound", status: "sent" });
+    await source.collection("whatsappreceipts").insertOne({ _id: "wa-receipt", metaId: "wamid.out", status: "read" });
+    await source.collection("whatsappmessages").updateOne({ _id: "wa-out" }, { $set: { status: "read" } });
+    await until(async () => !!await target.collection("whatsappconversations").findOne({ _id: "wa-chat" }) && (await target.collection("whatsappmessages").findOne({ _id: "wa-out" }))?.status === "read" && !!await target.collection("whatsappreceipts").findOne({ _id: "wa-receipt" }));
+    assert.equal(await target.collection("whatsappmessages").countDocuments({ metaId: "wamid.in" }), 1);
+    await target.collection("whatsappmessages").insertOne({ _id: "wa-local", conversation: "wa-chat", text: "Testing-only reply" });
+    assert.equal(await source.collection("whatsappmessages").findOne({ _id: "wa-local" }), null);
 
     await active.worker.stop();
     await source.collection("products").updateOne({ _id: "product" }, { $set: { stock: 7 } });

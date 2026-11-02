@@ -21,6 +21,8 @@ export function useManagementPage(resource, endpoint, initialStatus = "") {
       client.invalidateQueries({ queryKey: ["summary"] });
       client.invalidateQueries({ queryKey: ["analytics"] });
       if (resource === "adminProducts") {
+        client.invalidateQueries({ queryKey: ["product"] });
+        client.invalidateQueries({ queryKey: ["relatedProducts"] });
         client.invalidateQueries({ queryKey: ["adminCategories"] });
         client.invalidateQueries({ queryKey: ["products"] });
       }

@@ -2,6 +2,7 @@ import { feedbackRouter } from "./modules/product/feedback.routes.js";
 import { cardResetRouter } from "./modules/analytics/card-reset.routes.js";
 import { analyticsRouter } from "./modules/analytics/analytics.routes.js";
 import express from "express";
+import { webhookRouter, whatsappRouter } from "./modules/whatsapp/whatsapp.routes.js";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
@@ -20,6 +21,7 @@ import { release } from "./config/release.js";
 import { rateLimit } from "express-rate-limit";
 import { clientKey } from "./utils/clientIp.js";
 import { createHash } from "node:crypto";
+import { publicCatalogCache } from './middlewares/public-cache.middleware.js';
 const app = express();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
@@ -49,6 +51,8 @@ app.use(
   }),
 );
 
+app.use("/api/v1/whatsapp/webhook", webhookRouter);
+app.use("/api/v1/whatsapp/ai", express.json({ limit: "64kb" }));
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("public"));
@@ -143,6 +147,7 @@ app.use("/api/v1", (req, res, next) => {
     return next(new ApiError(503, "Database unavailable"));
   return next();
 });
+app.get(/^\/api\/v1\/(?:products\/store\/[^/]+(?:\/[^/]+(?:\/related)?)?|categories\/store\/[^/]+|stores\/slug\/[^/]+)\/?$/, publicCatalogCache);
 app.use("/api/v1/stores", storeRoutes);
 app.use("/api/v1/products", productRoutes);
 app.use("/api/v1/feedback", feedbackRouter);
@@ -154,6 +159,7 @@ app.use("/api/v1/carts", cartRouter);
 app.use("/api/v1/categories", categoryRouter);
 
 app.use("/api/v1/analytics", analyticsRouter);
+app.use("/api/v1/whatsapp", whatsappRouter);
 
 app.use((req, res, next) => next(new ApiError(404, "Endpoint not found")));
 

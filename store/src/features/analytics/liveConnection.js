@@ -1,5 +1,5 @@
 import { request } from "../../services/api";
-export function connectLive({ ticketPath, ticketBody, onMessage, onStatus, staleAfter = 0 }) {
+export function connectLive({ ticketPath, ticketBody, onMessage, onStatus, staleAfter = 0, livePath }) {
   let socket, retry, watchdog;
   let stopped = false;
   let attempt = 0;
@@ -18,7 +18,8 @@ export function connectLive({ ticketPath, ticketBody, onMessage, onStatus, stale
     try {
       const { ticket } = await request("post", ticketPath, ticketBody);
       if (stopped) return;
-      const url = new URL(import.meta.env.VITE_LIVE_URL || `${(import.meta.env.VITE_API_URL || "/api/v1").replace(/\/$/, "")}/analytics/live`, window.location.origin);
+      const apiBase = (import.meta.env.VITE_API_URL || "/api/v1").replace(/\/$/, "");
+      const url = new URL(livePath ? `${apiBase}${livePath}` : (import.meta.env.VITE_LIVE_URL || `${apiBase}/analytics/live`), window.location.origin);
       url.protocol = url.protocol === "https:" || url.protocol === "wss:" ? "wss:" : "ws:";
       socket = new WebSocket(url);
       lastMessage = Date.now();

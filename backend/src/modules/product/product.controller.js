@@ -167,16 +167,7 @@ export const getRelatedProducts = asyncHandler(async (req, res) => {
   res.json(new ApiResponse(200, related, "Related products fetched"));
 });
 const getProductByslug = asyncHandler(async (req, res) => {
-  const product = await Product.findOneAndUpdate(
-    {
-      tenantId: req.store._id,
-      slug: req.params.slug,
-      isActive: true,
-      deletedAt: null,
-    },
-    { $inc: { totalViews: 1 } },
-    { new: true },
-  )
+  const product = await Product.findOne({ tenantId: req.store._id, slug: req.params.slug, isActive: true, deletedAt: null })
     .select("-images.public_id -totalViews -__v -createdAt -updatedAt")
     .populate("category", "name slug");
   if (!product) throw new ApiError(404, "Product not found");

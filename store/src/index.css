@@ -4413,7 +4413,7 @@ del {
 .ob-category-tile strong { font-size: 17px; }
 .ob-category-tile small { color: #667085; }
 .ob-category-tile img { position: absolute; top: 0; right: 0; width: 42%; height: 100%; object-fit: cover; mix-blend-mode: multiply; }
-.ob-category-tile-photo { position: absolute; top: 0; right: 0; width: 42%; height: 100%; background-image: url('/images/beauty-categories.png'); background-size: 300% 100%; background-repeat: no-repeat; }
+.ob-category-tile-photo { position: absolute; top: 0; right: 0; width: 42%; height: 100%; background-image: url('/images/beauty-categories.webp'); background-size: 300% 100%; background-repeat: no-repeat; }
 .ob-category-tile-makeup { background-position: left center; }
 .ob-category-tile-fragrance { background-position: center center; }
 .ob-category-tile-bodycare { background-position: right center; }
@@ -4425,7 +4425,7 @@ del {
 .ob-store .ob-hero { margin-top: 20px; }
 .ob-store .ob-categories span { width: min(100%, 138px); height: 138px; border-radius: 14px; overflow: hidden; }
 .ob-store .ob-categories a span img { width: 100%; height: 100%; object-fit: cover; }
-.ob-store .ob-categories a span.ob-category-photo { background-image: url('/images/beauty-categories.png'); background-size: 300% 100%; background-repeat: no-repeat; }
+.ob-store .ob-categories a span.ob-category-photo { background-image: url('/images/beauty-categories.webp'); background-size: 300% 100%; background-repeat: no-repeat; }
 .ob-store .ob-categories a span.ob-category-photo-makeup { background-position: left center; }
 .ob-store .ob-categories a span.ob-category-photo-fragrance { background-position: center center; }
 .ob-store .ob-categories a span.ob-category-photo-bodycare { background-position: right center; }
@@ -4503,7 +4503,7 @@ del {
   .ob-categories a { min-width: 72px; gap: 5px; color: #11152b; }
   .ob-store .ob-categories span { width: 72px; height: 72px; border-radius: 12px; background: #fff0f4; overflow: hidden; }
   .ob-categories img { width: 100%; height: 100%; object-fit: cover; }
-  .ob-categories a span.ob-category-photo { background-image: url('/images/beauty-categories.png'); background-size: 300% 100%; background-repeat: no-repeat; }
+  .ob-categories a span.ob-category-photo { background-image: url('/images/beauty-categories.webp'); background-size: 300% 100%; background-repeat: no-repeat; }
   .ob-categories a span.ob-category-photo-makeup { background-position: left center; }
   .ob-categories a span.ob-category-photo-fragrance { background-position: center center; }
   .ob-categories a span.ob-category-photo-bodycare { background-position: right center; }

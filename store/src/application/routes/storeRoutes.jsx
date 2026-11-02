@@ -1,19 +1,19 @@
-import React from "react";
+import React, { lazy } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { BeautyStoreLayout as StoreLayout } from "../../layouts/BeautyStoreLayout";
 import Home from "../../pages/store/Home/BeautyHome";
-import Products from "../../pages/store/Products/Products";
-import ProductDetails from "../../pages/store/ProductDetails/ProfessionalProductDetails";
+const Products = lazy(() => import("../../pages/store/Products/Products"));
+const ProductDetails = lazy(() => import("../../pages/store/ProductDetails/ProfessionalProductDetails"));
 // May use later: storefront category overview. Admin category management remains active.
 // import Categories from "../../pages/store/Categories/Categories";
-import Cart from "../../pages/store/Cart/Cart";
-import Checkout from "../../pages/store/Checkout/Checkout";
-import Orders, {
-  OrderDetails,
-  OrderSuccess,
-} from "../../pages/store/Orders/Orders";
-import Account from "../../pages/store/Account/Account";
-import CustomerAuthPage from "../../pages/store/Auth/CustomerAuthPage";
+const Cart = lazy(() => import("../../pages/store/Cart/Cart"));
+const Checkout = lazy(() => import("../../pages/store/Checkout/Checkout"));
+const Orders = lazy(() => import("../../pages/store/Orders/Orders").then(module => ({ default: module.default })));
+const OrderDetails = lazy(() => import("../../pages/store/Orders/Orders").then(module => ({ default: module.OrderDetails })));
+const OrderSuccess = lazy(() => import("../../pages/store/Orders/Orders").then(module => ({ default: module.OrderSuccess })));
+const Account = lazy(() => import("../../pages/store/Account/Account"));
+const CustomerAuthPage = lazy(() => import("../../pages/store/Auth/CustomerAuthPage"));
+const PrivacyPolicyPage = lazy(() => import("../../pages/store/PrivacyPolicy/PrivacyPolicyPage"));
 export default function StoreRoutes() {
   const { pathname } = useLocation();
   return (
@@ -34,6 +34,7 @@ export default function StoreRoutes() {
         <Route path="orders/:id" element={<OrderDetails />} />
         {/* May use later: <Route path="wishlist" element={<Wishlist />} /> */}
         <Route path="account" element={<Account />} />
+        <Route path="privacy-policy" element={<PrivacyPolicyPage />} />
         <Route path="login" element={<CustomerAuthPage defaultMode="signin" />} />
         <Route path="signin" element={<CustomerAuthPage defaultMode="signin" />} />
         <Route path="signup" element={<CustomerAuthPage defaultMode="signup" />} />

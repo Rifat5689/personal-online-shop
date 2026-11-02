@@ -13,3 +13,6 @@ playwright-report/
 artifacts/
 release/
 gha-creds-*.json
+debug.log
+tmp/
+output/

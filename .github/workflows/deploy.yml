@@ -30,15 +30,21 @@ jobs:
       API_ORIGIN: ${{ inputs.target == 'production' && 'https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net' || 'https://test-originsofbeauty.azurewebsites.net' }}
       VITE_API_URL: ${{ inputs.target == 'production' && 'https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net/api/v1' || 'https://test-originsofbeauty.azurewebsites.net/api/v1' }}
       VITE_STOREFRONT_URL: ${{ inputs.target == 'production' && 'https://originsofbeauty.web.app' || 'https://test-originsofbeauty.web.app' }}
+      REQUIRE_CATALOG_SEO: 'true'
       VITE_DEMO_MODE: ${{ inputs.target == 'production' && 'false' || 'true' }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
-        with: {node-version: '22'}
-      - run: npm ci && npm ci --prefix backend && npm ci --prefix store
-      - run: npm prune --prefix backend --omit=dev
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            store/package-lock.json
+      - run: npm ci --prefix backend --omit=dev --no-audit --no-fund && npm ci --prefix store --no-audit --no-fund
       - run: python scripts/package-backend.py --with-dependencies
       - uses: azure/login@v2
         with:

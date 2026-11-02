@@ -92,6 +92,7 @@ export function attachLiveAnalytics(server, { intervalMs = 3000 } = {}) {
     }
   };
   const upgrade = (req, socket, head) => {
+    if (req.url === "/api/v1/whatsapp/live") return;
     const origin = req.headers.origin;
     const allowed = (process.env.CORS_ORIGIN || "")
       .split(",")

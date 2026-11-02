@@ -7,13 +7,15 @@ import { priceOf } from "../../cart/utils/cartStorage";
 import { money } from "../../../components/common/QueryState";
 
 import { trackEvent } from "../../analytics/tracking";
+import { useQueryClient } from '@tanstack/react-query';
+import { productQuery } from '../catalogQueries';
 
 export function ProductImage({ product, ...props }) {
   const url = product.images?.[0]?.url;
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [url]);
   return url && !failed ? (
-    <img src={url} alt={product.name} loading="lazy" onError={() => setFailed(true)} {...props} />
+    <img src={url} alt={product.name} loading="lazy" decoding="async" width="600" height="600" onError={() => setFailed(true)} {...props} />
   ) : (
     <div className="image-placeholder" role="img" aria-label={`${product.name}: no image`}>◇</div>
   );
@@ -21,6 +23,12 @@ export function ProductImage({ product, ...props }) {
 
 export function ProductCard({ product }) {
   const { storeSlug } = useStore();
+  const client = useQueryClient();
+  const prefetch = () => {
+    if (navigator.connection?.saveData || /2g/.test(navigator.connection?.effectiveType || '')) return;
+    void client.prefetchQuery(productQuery(storeSlug, product.slug));
+    void import('../../../pages/store/ProductDetails/ProfessionalProductDetails');
+  };
   const navigate = useNavigate();
   const { add, items } = useCart();
   const inCart = items.some((item) => item.product._id === product._id);
@@ -39,6 +47,8 @@ export function ProductCard({ product }) {
     <article
       className="product-card"
       onClick={handleCardClick}
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
       style={{ cursor: "pointer" }}
     >
       <Link

@@ -30,6 +30,7 @@ import {
   TbShoppingCart,
   TbSmartHome,
   TbUsers,
+  TbBrandWhatsapp,
   TbX,
 } from "react-icons/tb";
 import { useAuth } from "../application/providers/AuthProvider";
@@ -42,6 +43,7 @@ const navigation = [
   ["Categories", "categories", TbCategory],
   ["Orders", "orders", TbShoppingCart],
   ["Customers", "customers", TbUsers],
+  ["WhatsApp", "whatsapp", TbBrandWhatsapp],
   ["Store Settings", "settings", TbSettings],
 ];
 function MerchantLayoutContent() {

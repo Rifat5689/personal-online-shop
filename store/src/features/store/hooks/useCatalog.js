@@ -7,11 +7,13 @@ export function useCatalog() {
     queryKey: ["products", storeSlug],
     queryFn: () => request("get", `/products/store/${storeSlug}`),
     enabled: !!storeSlug,
+    staleTime: 60000,
   });
   const categories = useQuery({
     queryKey: ["categories", storeSlug],
     queryFn: () => request("get", `/categories/store/${storeSlug}`),
     enabled: !!storeSlug,
+    staleTime: 60000,
   });
   return { products, categories, storeSlug };
 }

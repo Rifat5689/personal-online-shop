@@ -70,7 +70,7 @@ export default function BeautyHome() {
         <h1 className="sr-only">{store.name}</h1>
         {[1, 2, 3].map((banner, index) => (
           <Link className={`ob-reference-banner${slide === index ? " active" : ""}`} key={banner} to={`/products`} aria-hidden={slide !== index} tabIndex={slide === index ? 0 : -1}>
-            <img src={`/images/banners/banner${banner}.png`} alt={["Featured beauty collection", "Skincare favourites and top brand products", "Discover your next beauty favourite"][index]} loading="eager" />
+            <img src={`/images/banners/banner${banner}.webp`} alt={["Featured beauty collection", "Skincare favourites and top brand products", "Discover your next beauty favourite"][index]} loading={index === 0 ? "eager" : "lazy"} fetchPriority={index === 0 ? "high" : "low"} decoding="async" width="1600" height="640" />
           </Link>
         ))}
         <div className="ob-reference-hero-dots">
@@ -98,7 +98,7 @@ export default function BeautyHome() {
             >
               <span className={!image && isOrigins && ["makeup", "fragrance", "bodycare"].includes(slug) ? `ob-category-photo ob-category-photo-${slug}` : ""}>
                 {image ? <img src={image} alt="" loading="lazy" /> : isOrigins && slug === "skincare" ? (
-                  <img src="/images/skincare-category.png" alt="" loading="lazy" />
+                  <img src="/images/skincare-category.webp" alt="" loading="lazy" />
                 ) : isOrigins && ["makeup", "fragrance", "bodycare"].includes(slug) ? null : React.createElement(Icon, { "aria-hidden": true })}
               </span>
               <strong>{name}</strong>

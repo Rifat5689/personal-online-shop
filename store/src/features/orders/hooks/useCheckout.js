@@ -84,6 +84,8 @@ export function useCheckout() {
         cart.clear();
       }
       queryClient.invalidateQueries({ queryKey: ["products", storeSlug] });
+      queryClient.invalidateQueries({ queryKey: ["product", storeSlug] });
+      queryClient.invalidateQueries({ queryKey: ["relatedProducts", storeSlug] });
       navigate(`/order-success`, {
         state: { order },
         replace: true,

@@ -1,0 +1,38 @@
+name: Refresh product share previews
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: personalshop-production
+  cancel-in-progress: false
+jobs:
+  refresh:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    env:
+      VITE_API_URL: https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net/api/v1
+      VITE_STOREFRONT_URL: https://originsofbeauty.web.app
+      VITE_DEMO_MODE: 'false'
+      REQUIRE_CATALOG_SEO: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: main}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm, cache-dependency-path: store/package-lock.json}
+      - run: npm ci --prefix store --no-audit --no-fund
+      - run: npm run build
+      - id: catalog
+        run: node scripts/refresh-storefront.mjs
+      - uses: google-github-actions/auth@v2
+        if: steps.catalog.outputs.changed == 'true'
+        with:
+          workload_identity_provider: projects/520568253705/locations/global/workloadIdentityPools/github/providers/personalshop
+          service_account: personalshop-deploy@personalshop.iam.gserviceaccount.com
+      - if: steps.catalog.outputs.changed == 'true'
+        run: npx --yes firebase-tools@15.34.0 deploy --only hosting --project personalshop --config firebase.production.json --non-interactive

@@ -21,6 +21,7 @@ import { PageMetadata } from "../../../components/common/PageMetadata";
 import LoadingSpinner from "../../../shared/components/LoadingSpinner";
 
 import { trackEvent } from "../../../features/analytics/tracking";
+import { productQuery } from '../../../features/store/catalogQueries';
 
 function DescriptionSection({ section }) {
   if (["text", "usage", "ingredients"].includes(section.type))
@@ -64,11 +65,7 @@ export default function ProfessionalProductDetails() {
   const { add } = useCart();
   const navigate = useNavigate();
   const [quantity, setQuantity] = useState(1);
-  const query = useQuery({
-    queryKey: ["product", storeSlug, productSlug],
-    queryFn: () =>
-      request("get", `/products/store/${storeSlug}/${productSlug}`),
-  });
+  const query = useQuery(productQuery(storeSlug, productSlug));
   const product = query.data;
   const trackedProduct = useRef(null);
   useEffect(() => {
@@ -88,9 +85,10 @@ export default function ProfessionalProductDetails() {
   return (
     <div className="shop-container ob-product-page">
       <PageMetadata
+        type="product"
         title={
           product
-            ? `${product.title || product.name} | ${store?.name || storeSlug}`
+            ? `${product.name} | ${store?.name || storeSlug}`
             : undefined
         }
         description={String(

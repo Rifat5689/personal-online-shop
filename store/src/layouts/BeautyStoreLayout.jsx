@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useIsFetching } from "@tanstack/react-query";
 import {
   Outlet,
@@ -29,8 +29,10 @@ import { request } from "../services/api";
 
 import { useStorefrontTracking } from "../features/analytics/hooks/useStorefrontTracking";
 import { trackEvent } from "../features/analytics/tracking";
+import { PageMetadata } from '../components/common/PageMetadata';
 
 const customerKey = (storeId) => `ownshop:customer:${storeId}`;
+const initialPath = window.location.pathname;
 
 function CustomerDialog({ open, onClose, customer, onLogout, store, storeSlug, onCustomerUpdated }) {
   const auth = useCustomerAuth({
@@ -86,6 +88,10 @@ function CustomerDialog({ open, onClose, customer, onLogout, store, storeSlug, o
 
 function StoreShell() {
   const { storeSlug, store } = useStore();
+  useEffect(() => {
+    // Static structured data describes the entry page; remove it after SPA navigation.
+    if (window.location.pathname !== initialPath) document.querySelectorAll('script[type="application/ld+json"]').forEach(element => element.remove());
+  });
   useStorefrontTracking(storeSlug);
   const trackedStore = useRef(null);
   useEffect(() => {
@@ -99,7 +105,7 @@ function StoreShell() {
   const { products } = useCatalog();
   const navigate = useNavigate();
   const location = useLocation();
-  const loadingRequests = useIsFetching({ predicate: (query) => query.queryKey[0] !== "mobileNotifications" });
+  const loadingRequests = useIsFetching({ predicate: (query) => query.queryKey[0] !== "mobileNotifications" && query.getObserversCount() > 0 && query.state.data === undefined });
   const base = "";
   const brand = storeSlug === "originsofbeauty" ? <>Origins<em>ofBeauty</em></> : store.name;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -391,7 +397,8 @@ function StoreShell() {
       )}
       {loadingRequests > 0 && <div className="store-loading-indicator" role="status"><span className="spinner" aria-hidden="true" /><span>Loading…</span></div>}
       <main className="ob-main" key={location.pathname}>
-        <Outlet context={{ customer, setCustomer, openIdentity: () => setIdentityOpen(true) }} />
+        {!/^\/products\/[^/]+\/?$/.test(location.pathname) && location.pathname !== '/privacy-policy' && <PageMetadata title={location.pathname === '/products' ? `All Products | ${store.name}` : store.name} description={store.description || 'Shop authentic beauty, skincare, makeup and accessories.'} image={store.profileImage?.url || new URL('/images/store-share.png', window.location.origin).href} noindex={/^\/(cart|checkout|orders|account|login|signin|signup|register|order-success)(\/|$)/.test(location.pathname)} />}
+        <Suspense fallback={<LoadingSpinner label="Loading page..." />}><Outlet context={{ customer, setCustomer, openIdentity: () => setIdentityOpen(true) }} /></Suspense>
       </main>
       <footer className="ob-footer">
         <div>
@@ -419,6 +426,7 @@ function StoreShell() {
         </div>
         <div>
           <strong>Customer care</strong>
+          <Link to="/privacy-policy">Privacy Policy</Link>
           {store.supportEmail && <a href={`mailto:${store.supportEmail}`}>Contact us</a>}
           {store.showShippingFees && store.whatsappNumber && (
             <a
@@ -441,6 +449,9 @@ function StoreShell() {
         <small>
           © {new Date().getFullYear()} {store.name} · Powered by OwnShop
         </small>
+      </footer>
+      <footer className="ob-mobile-privacy-footer">
+        <Link to="/privacy-policy">Privacy Policy</Link>
       </footer>
       {!isCheckout && <nav className={`ob-bottom-nav ob-reference-bottom-nav${scrollDown ? " is-visible" : ""}`} aria-label="Store navigation" inert={scrollDown ? undefined : ""}>
         <NavLink end to={base || "/"} aria-label="Home" title="Home">

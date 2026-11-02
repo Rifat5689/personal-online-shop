@@ -17,7 +17,7 @@ export default function Categories() {
             const isOrigins = storeSlug === "originsofbeauty";
             const productImage = matches.find(product => product.images?.some(photo => photo.url))?.images.find(photo => photo.url)?.url;
             const categoryPhoto = !category.image?.url && !productImage && isOrigins && ["makeup", "fragrance", "bodycare"].includes(category.slug);
-            const image = category.image?.url || productImage || (isOrigins && category.slug === "skincare" ? "/images/skincare-category.png" : null);
+            const image = category.image?.url || productImage || (isOrigins && category.slug === "skincare" ? "/images/skincare-category.webp" : null);
             return <Link key={category._id} to={`/categories/${category.slug}`} className="ob-category-tile">
               <span><strong>{category.name}</strong><small>{matches.length} products</small></span>
               {categoryPhoto && <span className={`ob-category-tile-photo ob-category-tile-${category.slug}`} aria-hidden="true" />}

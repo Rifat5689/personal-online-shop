@@ -13,6 +13,7 @@ import { useStore } from "../providers/StoreProvider";
 import { PageMetadata } from "../../components/common/PageMetadata";
 import StoreAppPage from "../../features/pwa/StoreAppPage";
 const AnalyticsPage = React.lazy(() => import("../../features/analytics/components/AnalyticsPage"));
+const WhatsAppPage = React.lazy(() => import("../../features/whatsapp/WhatsAppPage"));
 
 export default function AdminRoutes() {
   const storeSlug = "originsofbeauty";
@@ -47,6 +48,7 @@ export default function AdminRoutes() {
           <Route element={<AdminLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="whatsapp" element={<React.Suspense fallback={<div role="status">Loading inbox…</div>}><WhatsAppPage /></React.Suspense>} />
             <Route path="analytics" element={<><React.Suspense fallback={<div className="state-card" role="status">Loading analytics...</div>}><AnalyticsPage /></React.Suspense></>} />
             {["products", "products/create", "products/:id/edit"].map(
               (path) => (
