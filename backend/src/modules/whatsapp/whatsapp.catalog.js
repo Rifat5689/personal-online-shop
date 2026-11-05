@@ -9,15 +9,16 @@ const groups = [
   ["dry", "শুষ্ক", "ড্রাই"], ["bag", "handbag", "ব্যাগ", "হ্যান্ডব্যাগ"],
   ["pink", "গোলাপি", "পিংক"], ["sunscreen", "sun screen", "সানস্ক্রিন", "spf"],
   ["serum", "সিরাম"], ["moisturizer", "ময়েশ্চারাইজার", "ময়েশ্চারাইজার"],
+  ["earrings", "earring", "ear rings", "ear ring", "কানের দুল", "কানেরদুল", "দুল", "kan er jinish", "kaner jinish", "kaner dul", "kan er dul"],
 ];
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const stop = new Set("apu apni ache ase er jonno ta tar dekhan dekhান koto dam price please show me for the a an আছে আপু জন্য দাম কত দেখান টাকা মধ্যে takar moddhe".split(" "));
+const stop = new Set("apu apni ache ase er jonno ta tar dekhan dekhান koto dam price please show me for the a an আছে আপু জন্য দাম কত দেখান টাকা মধ্যে takar moddhe hbe hobe hobey ???".split(" "));
 export function queryGroups(value) {
   if (typeof value !== "string" || value.length > 200) throw new ApiError(400, "Search must be text under 200 characters");
   const query = value.toLowerCase().normalize("NFKC");
   const found = groups.filter(group => group.some(term => query.includes(term)));
   let rest = query;
-  for (const group of found) for (const term of group) rest = rest.replaceAll(term, " ");
+  for (const group of found) for (const term of [...group].sort((a, b) => b.length - a.length)) rest = rest.replaceAll(term, " ");
   return [...found, ...rest.split(/[^\p{L}\p{N}]+/u).filter(word => word.length > 1 && !stop.has(word) && !/^\d+$/.test(word)).map(word => [word])].slice(0, 8);
 }
 export function productPrice(product) { return Math.round(product.price * (1 - (product.discount || 0) / 100) * 100) / 100; }
@@ -48,7 +49,8 @@ export function createCatalog(store) {
     const filters = [];
     // Categories are tenant-filtered and resolved on the server, never accepted as query objects.
     budget(); const categories = await Category.find({ tenantId: store, name: category ? new RegExp(escape(category), "i") : new RegExp(matches.map(term => term.source).join("|"), "i") }).select("_id name").limit(40).maxTimeMS(2500).lean();
-    if (category) filters.push({ category: { $in: categories.map(item => item._id) } });
+    if (category && categories.length) filters.push({ category: { $in: categories.map(item => item._id) } });
+    else if (category) matches.push(...queryGroups(category).map(group => new RegExp(group.map(escape).join("|"), "i")));
     for (const expression of matches) filters.push({ $or: [...fields.map(field => ({ [field]: expression })), { category: { $in: categories.filter(item => expression.test(item.name)).map(item => item._id) } }] });
     if (maxPrice !== undefined) filters.push({ $expr: { $lte: [{ $round: [{ $multiply: ["$price", { $subtract: [1, { $divide: ["$discount", 100] }] }] }, 2] }, maxPrice] } });
     budget(); const products = await Product.find({ ...base, ...(filters.length ? { $and: filters } : {}) }).populate({ path: "category", match: { tenantId: store }, select: "name" }).sort({ _id: 1 }).limit(60).maxTimeMS(2500).lean();

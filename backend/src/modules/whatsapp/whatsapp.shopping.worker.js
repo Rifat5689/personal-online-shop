@@ -6,6 +6,12 @@ import { shoppingEnabled, testRecipientAllowed, StagingAISettings, ShoppingSessi
 import { generateShoppingReply } from "./whatsapp.shopping.js";
 import { downloadWhatsAppImage } from "./whatsapp.media.js";
 import { sendShoppingResponse } from "./whatsapp.shopping.send.js";
+import ApiError from "../../utils/ApiError.js";
+export function shoppingFailureMessage(error) {
+  if (error instanceof ApiError) return error.message.slice(0, 500);
+  const safe = new Set(["Recipient is not approved", "Staging message rate limit reached", "AI disabled or production AI owns this conversation", "AI controls changed after the message arrived", "Session is processing another message", "Human takeover or AI settings changed", "Waiting for mirrored test conversation; no message sent", "Meta delivery failed or is uncertain; no retry"]);
+  return safe.has(error?.message) ? error.message : "Staging AI could not complete this reply. No automatic resend. Check the latest job and provider connection.";
+}
 export async function queueStagingEvent(raw) {
   if (!shoppingEnabled()) return;
   const event = JSON.parse(raw.toString("utf8"));
@@ -87,7 +93,7 @@ export async function processShoppingJob(job, { generate = generateShoppingReply
       await ShoppingSession.updateOne({ _id: session._id }, { $set: { history: [...history, { direction: "inbound", text: inboundText }, { direction: "outbound", text: result.reply, products: result.products.map(p => ({ id: p.id })) }].slice(-12) } });
       await ShoppingJob.updateOne({ _id: job._id }, { $set: { status: "sent" } });
     } finally { await ShoppingSession.updateOne({ _id: session._id }, { $unset: { leaseUntil: 1 } }); }
-  } catch { await ShoppingJob.updateOne({ _id: job._id, status: { $ne: "skipped" } }, { $set: { status: "failed", error: "Staging AI stopped or failed. Check settings, takeover and provider status. No automatic resend." } }); }
+  } catch (error) { await ShoppingJob.updateOne({ _id: job._id, status: { $ne: "skipped" } }, { $set: { status: "failed", error: shoppingFailureMessage(error) } }); }
 }
 export async function deferForNewMessage(job, { inboundText, mediaId, replyToMetaId }) {
   const newer = await ShoppingJob.findOne({ store: job.store, phone: job.phone, status: "queued", _id: { $ne: job._id } }).sort({ createdAt: 1 });

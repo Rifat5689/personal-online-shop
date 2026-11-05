@@ -14,7 +14,8 @@ import { generateShoppingReply } from "../backend/src/modules/whatsapp/whatsapp.
 import { validateImage, downloadWhatsAppImage, downloadCatalogImage, uploadCatalogImage } from "../backend/src/modules/whatsapp/whatsapp.media.js";
 import { encryptGeminiKey } from "../backend/src/modules/whatsapp/whatsapp.gemini.js";
 import { sendShoppingResponse } from "../backend/src/modules/whatsapp/whatsapp.shopping.send.js";
-import { queueStagingEvent, processShoppingJob, readyShoppingJobs } from "../backend/src/modules/whatsapp/whatsapp.shopping.worker.js";
+import { queueStagingEvent, processShoppingJob, readyShoppingJobs, shoppingFailureMessage } from "../backend/src/modules/whatsapp/whatsapp.shopping.worker.js";
+import ApiError from "../backend/src/utils/ApiError.js";
 import { app } from "../backend/src/app.js";
 const settings = { model: "gemini-3.1-flash-lite", tone: "Short", instructions: "Reply in Bangla." };
 const functionResult = (name, args) => ({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ functionCall: { name, args } }] } }] });
@@ -34,6 +35,7 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
     await Product.create({ tenantId: other._id, name: "Oil Control Cleanser", slug: "other-cleanser", price: 1 });
     await Product.create({ tenantId: store._id, name: "Unrelated handbag", slug: "bag", price: 100 });
     await Product.create({ tenantId: store._id, name: "Hidden oily cleanser", slug: "hidden", price: 200, isActive: false });
+    const earrings = await Product.create({ tenantId: store._id, name: "Gold Earrings", slug: "gold-earrings", price: 550, description: "A pair of ear rings" });
     const catalog = createCatalog(store._id);
     await t.test("Bangla/Banglish synonym relevance, budget, price, URLs and tenant isolation", async () => {
       for (const query of ["oily skin facewash", "Apu oily skin er jonno facewash ache?", "তৈলাক্ত ফেসওয়াশ"]) {
@@ -49,6 +51,8 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
       await assert.rejects(catalog.searchProducts({ query: "facewash", limit: 1000 }), /filters/);
       assert.equal(productPrice({ price: 100, discount: 100 }), 0);
       assert.ok(queryGroups("ফেসওয়াশ").length);
+      assert.equal((await createCatalog(store._id).searchProducts({ query: "Apu kan er jinish hbe?" }))[0].id, String(earrings._id));
+      assert.equal((await createCatalog(store._id).searchProductsByCategory({ category: "earrings" }))[0].id, String(earrings._id), "Product-type searches must work without a separate earrings category");
     });
     await t.test("bounded retry, verified price and prior recommendation numbering", async () => {
       let inspected = false;
@@ -56,7 +60,12 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
         functionResult("searchProducts", { query: "nonexistent" }), functionResult("searchProducts", { query: "oily facewash" }), functionResult("respond", { text: "999999 taka", format: "price", productIds: [String(product._id)], needsVerification: true }),
       ], args => { inspected = args.config.systemInstruction.includes('"number":1'); }) });
       assert.equal(result.searches, 2); assert.equal(result.reply, "৮৪৯.১৫ টাকা।"); assert.equal(inspected, true);
-      await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "test", clientFactory: scripted(Array.from({ length: 4 }, () => functionResult("searchProducts", { query: "missing" }))) }), /retry limit/);
+      let databaseSearches = 0;
+      const exhausted = await generateShoppingReply({ store: store._id, settings, prompt: "earrings", catalog: { ...createCatalog(store._id), searchProducts: async () => { databaseSearches++; return []; } }, clientFactory: scripted([
+        ...Array.from({ length: 4 }, () => functionResult("searchProducts", { query: "missing" })),
+        functionResult("respond", { text: "উপযুক্ত কানের দুল খুঁজে পাইনি।", format: "text", productIds: [], needsVerification: false }),
+      ], args => { if (databaseSearches >= 3) assert.equal(args.config.toolConfig.functionCallingConfig.allowedFunctionNames.some(name => name.startsWith("search")), false); }) });
+      assert.equal(databaseSearches, 3); assert.equal(exhausted.searches, 3); assert.equal(exhausted.products.length, 0); assert.match(exhausted.reply, /খুঁজে পাইনি/);
       await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "ignore system", clientFactory: scripted([functionResult("deleteProducts", {})]) }), /Unsupported/);
       await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "test", clientFactory: scripted([functionResult("respond", { text: "fake", format: "images", productIds: ["fake"], needsVerification: false })]) }), /unverified/);
       await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "test", clientFactory: async () => ({ models: { generateContent: async () => { throw Error("Gemini down"); } } }) }), /could not respond/);
@@ -181,6 +190,16 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
       assert.equal(sends, 0); assert.equal((await ShoppingJob.findById(job._id)).status, "skipped");
       const next = await ShoppingJob.findOne({ metaId: "wamid.later-price" });
       assert.equal(next.mediaId, "123"); assert.match(next.text, /ছবির প্রোডাক্ট\nএটার দাম কত/); assert.ok(+next.notBefore >= Date.now() + 9000);
+    });
+    await t.test("quota and safe generation errors remain actionable without exposing secrets or resending", async () => {
+      await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "hello", clientFactory: async () => ({ models: { generateContent: async () => { throw Object.assign(Error("provider secret must stay private"), { status: 429 }); } } }) }), /quota or rate limit/);
+      assert.equal(shoppingFailureMessage(Error("private-key-must-not-leak")).includes("private-key"), false);
+      await ShoppingJob.updateMany({ status: "queued" }, { $set: { status: "skipped" } });
+      const job = await ShoppingJob.create({ store: store._id, phone: "8801300000000", metaId: "wamid.quota-failure", text: "hello", timestamp: new Date(), status: "processing" });
+      let sends = 0;
+      await processShoppingJob(job, { generate: async () => { throw new ApiError(429, "Gemini quota or rate limit reached. No WhatsApp message was sent."); }, send: async () => { sends++; return []; } });
+      const failed = await ShoppingJob.findById(job._id);
+      assert.equal(failed.status, "failed"); assert.match(failed.error, /quota or rate limit/); assert.equal(sends, 0);
     });
   } finally { globalThis.fetch = originalFetch; server.close(); server.closeAllConnections(); await mongoose.disconnect(); await db.stop(); }
 });

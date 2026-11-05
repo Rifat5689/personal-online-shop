@@ -43,7 +43,17 @@ export async function generateShoppingReply({ store, settings, history = [], pro
     thinkingConfig: /^gemini-3/.test(settings.model) ? { thinkingLevel: /^gemini-3\.(1|5)-flash-lite/.test(settings.model) ? "MINIMAL" : "LOW" } : undefined,
   };
   for (let round = 0; round < 5; round++) {
-    let result; try { result = await client.models.generateContent({ model: settings.model, contents, config }); } catch (error) { throw new ApiError(400, `Shopping AI could not respond (provider status ${Number(error.status) || "unavailable"}). No WhatsApp message was sent.`); }
+    // Budget exhaustion is a finish condition, not a failed customer reply.
+    // Keep the declarations stable for Gemini's prior function-call history.
+    const allowedFunctionNames = round === 4 || calls >= 10 ? ["respond"] : shoppingTools.filter(tool => searches < 3 || !tool.name.startsWith("search")).map(tool => tool.name);
+    const roundConfig = { ...config, toolConfig: { functionCallingConfig: { mode: "ANY", allowedFunctionNames } } };
+    let result; try { result = await client.models.generateContent({ model: settings.model, contents, config: roundConfig }); } catch (error) {
+      const status = Number(error.status);
+      if (status === 429) throw new ApiError(429, "Gemini quota or rate limit reached. Wait before testing again or check Google AI Studio quota/billing. No WhatsApp message was sent.");
+      if ([401, 403].includes(status)) throw new ApiError(400, "Gemini rejected the key or project access. Check AI Settings. No WhatsApp message was sent.");
+      if (["AbortError", "TimeoutError"].includes(error.name) || status === 504) throw new ApiError(504, "Gemini timed out. No WhatsApp message was sent.");
+      throw new ApiError(400, `Shopping AI could not respond (provider status ${status || "unavailable"}). No WhatsApp message was sent.`);
+    }
     const candidate = result.candidates?.[0];
     if (result.promptFeedback?.blockReason || (candidate?.finishReason && candidate.finishReason !== "STOP")) throw new ApiError(400, "Shopping AI response was blocked or incomplete");
     const parts = candidate?.content?.parts || [];
@@ -74,7 +84,13 @@ export async function generateShoppingReply({ store, settings, history = [], pro
         return { reply: text, products, format: verify ? "text" : priceOnly ? "price" : args.format, needsVerification: verify, toolsUsed: calls, searches, imageMatch: image ? "possible_only" : null, visualComparisons };
       }
       if (!Object.hasOwn(catalog, call.name)) throw new ApiError(400, "Unsupported AI tool");
-      if (call.name.startsWith("search") && ++searches > 3) throw new ApiError(400, "Shopping search retry limit reached");
+      if (call.name.startsWith("search")) {
+        if (searches >= 3) {
+          responses.push({ functionResponse: { name: call.name, ...(call.id ? { id: call.id } : {}), response: { result: [], searchLimitReached: true, instruction: "No more searches are permitted. Use respond with relevant verified results already obtained, or briefly say no suitable match was found. Never invent results or suggest unrelated prior products." } } });
+          continue;
+        }
+        searches++;
+      }
       if (call.name.startsWith("search") && maxBudget !== undefined) args.maxPrice = typeof args.maxPrice === "number" ? Math.min(args.maxPrice, maxBudget) : maxBudget;
       const output = await catalog[call.name](args);
       const returned = Array.isArray(output) ? output : output?.salePrice !== undefined ? [output] : [];

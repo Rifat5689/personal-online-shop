@@ -48,6 +48,13 @@ ranking. Gemini can retry with relevant alternatives, at most three searches.
 The limit is five provider rounds, twelve tool calls, eighteen catalog operations,
 2,048 output tokens per round, six products, twelve history entries, and a
 55-second provider deadline. Database operations have a 2.5-second limit.
+After three searches, further search functions are disabled and Gemini must
+finish from verified results or report a concise no-match response. Search
+exhaustion does not fail the whole customer reply. Product-type category terms
+also fall back to strict keyword matching when no matching category label exists;
+for example Banglish `kan er jinish` maps to earrings, not unrelated jewellery.
+Known safe worker errors are preserved for the admin, including explicit Gemini
+quota/rate-limit messages. Unknown internal errors remain generic to protect secrets.
 Budget filters apply to the discounted price; server-side budget parsing also
 constrains recognized Bangla/Banglish/English requests. Prices match the active
 storefront calculation, rounded to two decimal places. Product URLs use the
