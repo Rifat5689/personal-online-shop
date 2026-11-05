@@ -11,7 +11,7 @@ import { AISettings, Conversation, Message } from "../backend/src/modules/whatsa
 import { StagingAISettings, ShoppingSession, AvailabilityVerification, ShoppingJob, testRecipientAllowed } from "../backend/src/modules/whatsapp/whatsapp.shopping.models.js";
 import { createCatalog, productPrice, queryGroups } from "../backend/src/modules/whatsapp/whatsapp.catalog.js";
 import { generateShoppingReply } from "../backend/src/modules/whatsapp/whatsapp.shopping.js";
-import { validateImage, downloadWhatsAppImage } from "../backend/src/modules/whatsapp/whatsapp.media.js";
+import { validateImage, downloadWhatsAppImage, downloadCatalogImage, uploadCatalogImage } from "../backend/src/modules/whatsapp/whatsapp.media.js";
 import { encryptGeminiKey } from "../backend/src/modules/whatsapp/whatsapp.gemini.js";
 import { sendShoppingResponse } from "../backend/src/modules/whatsapp/whatsapp.shopping.send.js";
 import { queueStagingEvent, processShoppingJob } from "../backend/src/modules/whatsapp/whatsapp.shopping.worker.js";
@@ -53,7 +53,7 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
     await t.test("bounded retry, verified price and prior recommendation numbering", async () => {
       let inspected = false;
       const result = await generateShoppingReply({ store: store._id, settings, prompt: "2 number tar price koto?", history: [{ direction: "outbound", text: "Products", products: [{ id: String(product._id) }] }], clientFactory: scripted([
-        functionResult("searchProducts", { query: "nonexistent" }), functionResult("searchProducts", { query: "oily facewash" }), functionResult("respond", { text: "999999 taka", format: "price", productIds: [String(product._id)], needsVerification: false }),
+        functionResult("searchProducts", { query: "nonexistent" }), functionResult("searchProducts", { query: "oily facewash" }), functionResult("respond", { text: "999999 taka", format: "price", productIds: [String(product._id)], needsVerification: true }),
       ], args => { inspected = args.config.systemInstruction.includes('"number":1'); }) });
       assert.equal(result.searches, 2); assert.equal(result.reply, "৮৪৯.১৫ টাকা।"); assert.equal(inspected, true);
       await assert.rejects(generateShoppingReply({ store: store._id, settings, prompt: "test", clientFactory: scripted(Array.from({ length: 4 }, () => functionResult("searchProducts", { query: "missing" }))) }), /retry limit/);
@@ -68,6 +68,12 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
       await assert.rejects(downloadWhatsAppImage("123", async () => new Response(JSON.stringify({ url: "https://127.0.0.1/private", mime_type: "image/jpeg", file_size: 4 }))), /Unsupported/);
       let mediaCalls = 0;
       assert.deepEqual(await downloadWhatsAppImage("123", async () => ++mediaCalls === 1 ? new Response(JSON.stringify({ url: "https://lookaside.fbsbx.com/media", mime_type: "image/jpeg", file_size: 4 })) : new Response(bytes)), image);
+      assert.equal(await downloadCatalogImage("https://127.0.0.1/private", async () => { throw Error("Must never fetch private hosts"); }), null);
+      process.env.AZURE_STORAGE_ACCOUNT_NAME = "qaaccount";
+      assert.equal(await uploadCatalogImage("https://qaaccount.blob.core.windows.net/test/photo.jpg", async (url, options) => {
+        if (String(url).includes("blob.core.windows.net")) { assert.equal(options.headers?.Authorization, undefined); return new Response(bytes, { headers: { "Content-Type": "image/jpeg" } }); }
+        assert.match(String(url), /\/123456\/media$/); assert.ok(options.body instanceof FormData); return new Response(JSON.stringify({ id: "777" }));
+      }), "777");
       const result = await generateShoppingReply({ store: store._id, settings, prompt: "এই ছবিরটি", image, clientFactory: scripted([functionResult("searchProducts", { query: "oily cleanser" }), functionResult("respond", { text: "Exact match", format: "images", productIds: [String(product._id)], needsVerification: false })], args => assert.ok(args.contents.some(item => item.parts.some(part => part.inlineData)))) });
       assert.equal(result.imageMatch, "possible_only"); assert.match(result.reply, /মিল/); assert.doesNotMatch(result.reply, /Exact/);
     });

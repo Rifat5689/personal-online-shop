@@ -68,14 +68,17 @@ Meta-owned hostnames, no redirects, a ten-second timeout, a five-MB cap and
 JPEG/PNG/WebP magic-byte validation. Credentials and image binaries are not
 logged. Gemini receives inline image bytes, extracts visible characteristics and
 uses catalog search; all visual matches are labelled possible, never exact.
-This phase does not provide a dedicated visual similarity index or embedding
-comparison of candidate photos. Catalog text must support a suggested match.
+Up to three candidate photos are fetched anonymously from the configured Azure
+account or Cloudinary, validated, and supplied to Gemini for visual comparison.
+Unavailable candidate photos leave text-supported possible matches. This phase
+does not provide a dedicated visual similarity index or embeddings.
 
 Price-only responses are generated from verified prices. Requested product images
 use Meta image messages with product name, verified price, short description and
 real public URL in a caption (up to 1,024 characters). Missing catalog images fall
-back to a truthful text card. Meta rejection/uncertain delivery stops the batch;
-the system does not retry uncertain sends. Recommendation numbering is persisted
+back to a truthful text card. A definitive image-link rejection can fall back to
+a validated storage download, Meta media upload and one media-ID send. An uncertain
+send is never retried; other failures stop the batch. Numbering is persisted
 on outgoing messages. Up to six product messages are sent only when the customer
 requests multiple recommendations; ordinary answers remain one concise message.
 

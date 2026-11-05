@@ -96,9 +96,9 @@ try {
       if (!response.ok) throw Error("Existing product image unavailable");
       const image = validateImage(Buffer.from(await response.arrayBuffer()), response.headers.get("content-type")?.split(";")[0]);
       const result = await generateShoppingReply({ store: store._id, settings: local || source, prompt: "এই ছবির মতো প্রোডাক্ট খুঁজে ছবি দেখান।", image });
-      if (result.imageMatch !== "possible_only") throw Error("Live image certainty guard failed");
+      if (result.imageMatch !== "possible_only" || (env.AZURE_STORAGE_ACCOUNT_NAME && result.products.length && !result.visualComparisons)) throw Error("Live image certainty guard failed");
       report.push({ name: "image", ...result });
-      console.log(JSON.stringify({ liveGeminiCase: "image", passed: true, products: result.products.length, tools: result.toolsUsed }));
+      console.log(JSON.stringify({ liveGeminiCase: "image", passed: true, products: result.products.length, tools: result.toolsUsed, visualComparisons: result.visualComparisons }));
     }
     mkdirSync("artifacts", { recursive: true }); writeFileSync("artifacts/staging-shopping-live-ai.json", JSON.stringify(report, null, 2));
   }

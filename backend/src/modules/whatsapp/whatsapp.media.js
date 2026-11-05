@@ -23,3 +23,32 @@ export async function downloadWhatsAppImage(mediaId, fetcher = fetch) {
   for await (const chunk of response.body) { size += chunk.length; if (size > MAX) { await response.body.cancel().catch(() => {}); throw new ApiError(400, "Image exceeds 5 MB"); } chunks.push(chunk); }
   return validateImage(Buffer.concat(chunks), media.mime_type);
 }
+export async function downloadCatalogImage(address, fetcher = fetch) {
+  // These URLs come only from tenant-filtered products, never customer arguments.
+  // Restrict anonymous fetches to existing storage providers; never forward Meta credentials.
+  let url; try { url = new URL(address); } catch { return null; }
+  const account = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+  const azureHost = account ? `${account}.blob.core.windows.net` : null;
+  if (url.protocol !== "https:" || url.username || url.password || url.port || !(url.hostname === azureHost || url.hostname === "res.cloudinary.com")) return null;
+  try {
+    const response = await fetcher(url.href, { redirect: "error", signal: AbortSignal.timeout(8000) });
+    if (!response.ok || Number(response.headers.get("content-length")) > MAX) return null;
+    const chunks = []; let size = 0;
+    for await (const chunk of response.body) { size += chunk.length; if (size > MAX) return null; chunks.push(chunk); }
+    return validateImage(Buffer.concat(chunks), response.headers.get("content-type")?.split(";")[0]);
+  } catch { return null; }
+}
+export async function uploadCatalogImage(address, fetcher = fetch) {
+  const image = await downloadCatalogImage(address, fetcher);
+  if (!image) return null;
+  const token = process.env.META_WHATSAPP_ACCESS_TOKEN, phone = process.env.META_WHATSAPP_PHONE_NUMBER_ID, version = process.env.META_GRAPH_API_VERSION;
+  if (!token || !/^\d+$/.test(phone || "") || !/^v\d+\.0$/.test(version || "")) return null;
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp"); form.append("type", image.inlineData.mimeType);
+  form.append("file", new Blob([Buffer.from(image.inlineData.data, "base64")], { type: image.inlineData.mimeType }), "product-image");
+  try {
+    const response = await fetcher(`https://graph.facebook.com/${version}/${phone}/media`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return null;
+    const result = await response.json(); return /^\d+$/.test(result.id || "") ? result.id : null;
+  } catch { return null; }
+}
