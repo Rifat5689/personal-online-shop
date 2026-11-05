@@ -216,7 +216,7 @@ export function startDatabaseMirror() {
   if (process.env.DB_MIRROR_ENABLED !== "true") return;
   try {
     targetClient = new MongoClient(process.env.MONGODB_MIRROR_URI, { serverSelectionTimeoutMS: 10000, connectTimeoutMS: 10000, maxPoolSize: 5, retryWrites: true });
-    const collections = [...new Set(Object.values(mongoose.connection.models).map((model) => model.collection.collectionName))];
+    const collections = [...new Set(Object.values(mongoose.connection.models).map((model) => model.collection.collectionName).filter(name => !/^whatsapp(?:staging|shopping|availability)/.test(name)))];
     active = new DatabaseMirror({ source: mongoose.connection.db, target: targetClient.db(), collections, status: mirrorStatus }).start();
   } catch {
     mirrorStatus.status = "blocked";

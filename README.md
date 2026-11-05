@@ -26,6 +26,10 @@ The original has 10 active products. Testing adds 40 clearly named demo products
 
 ## Verification and releases
 
+The testing WhatsApp shopping assistant, isolated AI settings, Gemini catalog
+tools, image flows and human availability verification are documented in
+[WhatsApp shopping staging](docs/WHATSAPP_SHOPPING_STAGING.md).
+
 Run `npm test` while the backend is running. For a disposable database, start `node tests/qa-server.mjs` and set `TEST_API_URL=http://127.0.0.1:5001/api/v1`. GitHub validation always uses this disposable backend to test candidate changes before deployment. Run `npx playwright install chromium`, then `npm run test:browser` while both apps are running. `TEST_API_URL` and `TEST_URL` can also select a deployed test environment. Tests exercise isolation, owner login, optional categories and category deletion, product CRUD, idempotent checkout, stock restoration, order privacy, storefront navigation, demo admin login and mobile/desktop rendering. Screenshots and traces are written to ignored artifact folders.
 
 Categories are optional. Deleting a category atomically clears its reference on all its products (including archived products) and removes the category. Products, images, stock and order history are preserved.

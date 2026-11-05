@@ -1,9 +1,10 @@
+import ShoppingTestPanel from "./ShoppingTestPanel";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { TbArrowLeft, TbKey, TbSparkles } from "react-icons/tb";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { request, errorMessage } from "../../services/api";
-export default function AISettingsPanel({ onClose, conversationId }) {
+export default function AISettingsPanel({ onClose, conversationId, onManualReply }) {
   const query = useQuery({ queryKey: ["whatsapp", "ai-settings"], queryFn: () => request("get", "/whatsapp/ai/settings") });
   const [form, setForm] = useState(null), [apiKey, setApiKey] = useState(""), [models, setModels] = useState([]), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [prompt, setPrompt] = useState("Hello! Could you tell me about your business?"), [preview, setPreview] = useState("");
   const client = useQueryClient(), panel = useRef(null), loaded = useRef(false);
@@ -60,7 +61,7 @@ export default function AISettingsPanel({ onClose, conversationId }) {
       {query.isPending && <p className="wa-empty" role="status">Loading settings…</p>}
       {query.isError && <p className="wa-error" role="alert">{errorMessage(query.error)}</p>}
       {form && <form onSubmit={save} className="wa-settings-form">
-        <div className="wa-setting-switch"><div><strong>AI auto reply</strong><p>{form.autoRepliesAvailable === false ? "This testing inbox mirrors production. Preview AI here; enable live automatic replies in production after publishing the AI release." : "Only chats you explicitly enable receive automatic replies."}</p></div><input aria-label="Global AI Auto Reply" type="checkbox" role="switch" checked={form.enabled} onChange={event => toggleGlobal(event.target.checked)} disabled={busy || form.autoRepliesAvailable === false} /></div>
+        <div className="wa-setting-switch"><div><strong>AI auto reply</strong><p>{form.stagingSettings ? "Testing settings are separate. Live AI is restricted to the approved personal test recipient and an enabled test session." : form.autoRepliesAvailable === false ? "This inbox mirrors production. Live conversation controls remain in production." : "Only chats you explicitly enable receive automatic replies."}</p></div><input aria-label="Global AI Auto Reply" type="checkbox" role="switch" checked={form.enabled} onChange={event => toggleGlobal(event.target.checked)} disabled={busy || (form.autoRepliesAvailable === false && !form.stagingSettings)} /></div>
         <div className="wa-setting-section"><label htmlFor="wa-api-key"><TbKey aria-hidden="true" /> Gemini API key</label><input id="wa-api-key" type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={event => { setApiKey(event.target.value); setNotice(""); }} placeholder={form.keyConfigured ? "Key saved · enter a new key to replace it" : "Paste your Gemini API key"} disabled={busy} />
           <div className="wa-connection-row"><span className={form.connectionState === "connected" ? "connected" : ""}>{form.connectionState === "connected" ? "● Connected" : form.keyConfigured ? "● Key configured" : "○ Not connected"}</span><button type="button" onClick={connect} disabled={busy || (!apiKey && !form.keyConfigured)}>Check connection</button></div><small>Your saved key is never displayed. Paste a key, check the connection, then save.</small>
         </div>
@@ -68,6 +69,7 @@ export default function AISettingsPanel({ onClose, conversationId }) {
         <div className="wa-setting-section"><label htmlFor="wa-personality">About Me / AI Personality &amp; Instructions</label><p className="wa-field-help">Write freely about yourself, your business, preferred language and how you want replies to sound. Include only facts the assistant should use.</p><textarea id="wa-personality" rows={12} maxLength={12000} value={form.instructions} onChange={event => change("instructions", event.target.value)} disabled={busy} placeholder="About me and my business…&#10;&#10;Preferred language and communication style…&#10;&#10;How to answer customers and when to ask for my help…" /><small>{form.instructions.length.toLocaleString()} / 12,000 characters · Sent as the system instruction with every AI reply.</small></div>
         <p className="wa-ai-disclosure">AI represents your communication style and must not claim to be human. Sending a manual reply turns AI off for that chat.</p>
         <button className="wa-primary" disabled={busy}>{busy ? "Working…" : "Save settings"}</button>
+        {form.shoppingAvailable && <ShoppingTestPanel onManualReply={onManualReply} conversationId={conversationId} testRecipients={form.testRecipients || []} />}
         <div className="wa-preview-section"><h3>Try a response</h3><p>Uses your saved settings and recent chat context. No WhatsApp message is sent.</p><label htmlFor="wa-test-message">Test customer message</label><textarea id="wa-test-message" rows={3} maxLength={2000} value={prompt} onChange={event => setPrompt(event.target.value)} disabled={busy} /><button type="button" className="wa-secondary" onClick={test} disabled={busy || !form.keyConfigured || !prompt.trim()}>Test AI Response</button>{preview && <div className="wa-preview" role="status">{preview}</div>}</div>
         {error && <p className="wa-error" role="alert">{error}</p>}{notice && <p className="wa-save-notice" role="status">{notice}</p>}
       </form>}

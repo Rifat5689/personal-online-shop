@@ -1,5 +1,11 @@
 # Gemini replies and WhatsApp settings
 
+Testing now has separate settings and a database-aware shopping assistant, with
+live replies limited to explicitly approved personal recipients. See
+[testing shopping architecture and instructions](WHATSAPP_SHOPPING_STAGING.md).
+The relay restrictions below describe ordinary mirrored customer conversations;
+they still apply outside the staging recipient allowlist.
+
 This phase adds settings and a durable, text-only automatic-reply worker to the existing WhatsApp integration. No RAG, embeddings, file uploads or training features are included.
 
 ## Admin controls

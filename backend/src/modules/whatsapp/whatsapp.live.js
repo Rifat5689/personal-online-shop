@@ -22,7 +22,7 @@ export function attachWhatsAppLive(server) {
   };
   const watch = () => {
     if (stopped || stream || mongoose.connection.readyState !== 1 || !wss.clients.size) return;
-    stream = mongoose.connection.watch([{ $match: { "ns.coll": { $in: ["whatsappconversations", "whatsappmessages", "whatsappaisettings", "whatsappaijobs"] } } }], { fullDocument: "updateLookup", maxAwaitTimeMS: 1000 });
+    stream = mongoose.connection.watch([{ $match: { "ns.coll": { $in: ["whatsappconversations", "whatsappmessages", "whatsappaisettings", "whatsappaijobs", "whatsappstagingaisettings", "whatsappavailabilityverifications"] } } }], { fullDocument: "updateLookup", maxAwaitTimeMS: 1000 });
     stream.on("change", event => {
       const storeId = event.fullDocument?.store && String(event.fullDocument.store);
       // Notifications carry no message text. Every data read still passes HTTP admin auth.

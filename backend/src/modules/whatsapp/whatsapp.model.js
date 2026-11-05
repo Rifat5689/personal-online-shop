@@ -13,6 +13,7 @@ const message = new Schema({
   conversation: { type: Schema.Types.ObjectId, required: true, index: true },
   metaId: String, requestId: String,
   direction: { type: String, enum: ["inbound", "outbound"], required: true },
+  mediaId: String, replyToMetaId: String, productIds: [Schema.Types.ObjectId], imageUrl: String,
   text: String, type: { type: String, default: "text" },
   status: String, statusAt: Date, error: String, timestamp: { type: Date, required: true },
   source: { type: String, enum: ["customer", "admin", "ai"], default: "admin" },

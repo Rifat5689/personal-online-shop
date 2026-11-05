@@ -12,6 +12,11 @@ import { aiRouter } from "./whatsapp.ai.routes.js";
 import { queueIncomingAI } from "./whatsapp.ai.worker.js";
 import { applyReceipt, sendWhatsAppText } from "./whatsapp.send.js";
 
+import { queueStagingEvent } from "./whatsapp.shopping.worker.js";
+import { downloadWhatsAppImage } from "./whatsapp.media.js";
+import { shoppingEnabled, AvailabilityVerification, StagingAISettings, ShoppingSession, ShoppingJob, testRecipientAllowed } from "./whatsapp.shopping.models.js";
+import { shoppingRouter } from "./whatsapp.shopping.routes.js";
+
 export const webhookRouter = express.Router();
 webhookRouter.get("/", (req, res) => {
   if (process.env.WHATSAPP_VERIFY_TOKEN && req.query["hub.mode"] === "subscribe" && req.query["hub.verify_token"] === process.env.WHATSAPP_VERIFY_TOKEN && typeof req.query["hub.challenge"] === "string")
@@ -28,6 +33,7 @@ webhookRouter.post("/", express.raw({ type: "application/json", limit: "1mb" }),
     if (relay !== destination || process.env.WEBSITE_SITE_NAME === "originsofbeauty") return res.sendStatus(503);
     try {
       const forwarded = await fetch(destination, { method: "POST", headers: { "Content-Type": "application/json", "x-hub-signature-256": req.get("x-hub-signature-256") }, body: req.body, signal: AbortSignal.timeout(20000) });
+      if (forwarded.ok) await queueStagingEvent(req.body);
       return res.sendStatus(forwarded.ok ? 200 : 503);
     } catch { return res.sendStatus(503); }
   }
@@ -49,7 +55,7 @@ webhookRouter.post("/", express.raw({ type: "application/json", limit: "1mb" }),
         chat = await Conversation.findOneAndUpdate({ store: store._id, phone: item.from }, { $setOnInsert: { name: value.contacts?.find(c => c.wa_id === item.from)?.profile?.name || item.from } }, { upsert: true, new: true });
       } catch (err) { if (err.code !== 11000) throw err; chat = await Conversation.findOne({ store: store._id, phone: item.from }); }
       const aiSettings = item.type === "text" && chat.aiEnabled ? await AISettings.findOne({ store: store._id }) : null;
-      await Message.updateOne({ metaId: item.id }, { $setOnInsert: { store: store._id, conversation: chat._id, direction: "inbound", source: "customer", text, type: item.type, status: "received", timestamp, aiEligible: Boolean(aiSettings?.enabled && chat.aiEnabled), aiSettingsRevision: aiSettings?.revision, aiChatRevision: chat.aiRevision } }, { upsert: true }).catch(err => { if (err.code !== 11000) throw err; });
+      await Message.updateOne({ metaId: item.id }, { $setOnInsert: { store: store._id, conversation: chat._id, direction: "inbound", source: "customer", text, mediaId: item.type === "image" ? item.image?.id : undefined, replyToMetaId: item.context?.id, type: item.type, status: "received", timestamp, aiEligible: Boolean(aiSettings?.enabled && chat.aiEnabled), aiSettingsRevision: aiSettings?.revision, aiChatRevision: chat.aiRevision } }, { upsert: true }).catch(err => { if (err.code !== 11000) throw err; });
       // Safe to repeat after a partial webhook failure; older retries cannot rewind the window or preview.
       await Conversation.updateOne({ _id: chat._id }, { $max: { lastInboundAt: timestamp } });
       await Conversation.updateOne({ _id: chat._id, $or: [{ lastMessageAt: { $lte: timestamp } }, { lastMessageAt: null }] }, { $set: { lastMessageAt: timestamp, preview: text.slice(0, 160) } });
@@ -75,13 +81,30 @@ webhookRouter.post("/", express.raw({ type: "application/json", limit: "1mb" }),
 export const whatsappRouter = express.Router();
 whatsappRouter.use(verifyJwt, requireRoles("ADMIN", "ECO"), requireTenant);
 whatsappRouter.use("/ai", aiRouter);
+whatsappRouter.use("/shopping", shoppingRouter);
+whatsappRouter.get("/messages/:id/image", async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw new ApiError(400, "Invalid image message");
+  const message = await Message.findOne({ _id: req.params.id, store: req.store._id, type: "image" });
+  const stagingImage = message && shoppingEnabled() ? await ShoppingJob.findOne({ store: req.store._id, metaId: message.metaId }) : null;
+  const mediaId = message?.mediaId || stagingImage?.mediaId;
+  if (!mediaId) throw new ApiError(404, "Image is unavailable or expired");
+  const image = await downloadWhatsAppImage(mediaId);
+  res.set("Cache-Control", "private, no-store").type(image.inlineData.mimeType).send(Buffer.from(image.inlineData.data, "base64"));
+});
 whatsappRouter.post("/live-ticket", rateLimit({ windowMs: 60000, limit: 30, keyGenerator: req => String(req.user._id) }), (req, res) => {
   res.json({ data: { ticket: createChatTicket(req.user, req.store) } });
 });
 whatsappRouter.get("/conversations", async (req, res) => {
-  const conversations = await Conversation.find({ store: req.store._id }).sort({ lastMessageAt: -1 }).limit(200).lean();
+  let conversations = await Conversation.find({ store: req.store._id }).sort({ lastMessageAt: -1 }).limit(200).lean();
   const settings = await AISettings.findOne({ store: req.store._id });
-  res.json({ data: { conversations, aiEnabled: settings?.enabled || false, autoRepliesAvailable: !process.env.WHATSAPP_WEBHOOK_RELAY_URL, configured: Boolean(process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID && /^v\d+\.0$/.test(process.env.META_GRAPH_API_VERSION || "")), serverTime: new Date() } });
+  let displayedSettings = settings;
+  if (shoppingEnabled()) {
+    displayedSettings = await StagingAISettings.findOne({ store: req.store._id });
+    const sessions = await ShoppingSession.find({ store: req.store._id, owner: req.user._id }).sort({ createdAt: -1 }).lean();
+    conversations = conversations.map(chat => testRecipientAllowed(chat.phone) ? { ...chat, stagingTest: true, aiEnabled: Boolean(sessions.find(session => session.phone === chat.phone)?.aiEnabled) } : chat);
+  }
+  const pendingVerifications = shoppingEnabled() ? await AvailabilityVerification.countDocuments({ store: req.store._id, status: "pending" }) : 0;
+  res.json({ data: { pendingVerifications, shoppingAvailable: shoppingEnabled(), productionAIEnabled: settings?.enabled || false, conversations, aiEnabled: displayedSettings?.enabled || false, autoRepliesAvailable: !process.env.WHATSAPP_WEBHOOK_RELAY_URL, configured: Boolean(process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID && /^v\d+\.0$/.test(process.env.META_GRAPH_API_VERSION || "")), serverTime: new Date() } });
 });
 async function getChat(req) {
   if (!mongoose.isValidObjectId(req.params.id)) throw new ApiError(400, "Invalid conversation");
@@ -91,6 +114,15 @@ async function getChat(req) {
 }
 whatsappRouter.patch("/conversations/:id/ai", async (req, res) => {
   const chat = await getChat(req);
+  if (shoppingEnabled() && testRecipientAllowed(chat.phone)) {
+    if (typeof req.body.enabled !== "boolean") throw new ApiError(400, "Choose AI on or off");
+    if (req.body.enabled) {
+      const existing = await ShoppingSession.findOne({ store: req.store._id, phone: chat.phone, owner: req.user._id }).sort({ createdAt: -1 });
+      if (existing) await ShoppingSession.updateOne({ _id: existing._id }, { $set: { aiEnabled: true }, $inc: { revision: 1 } });
+      else await ShoppingSession.create({ store: req.store._id, phone: chat.phone, owner: req.user._id, conversation: chat._id });
+    } else await ShoppingSession.updateMany({ store: req.store._id, phone: chat.phone }, { $set: { aiEnabled: false }, $inc: { revision: 1 } });
+    return res.json({ data: { aiEnabled: req.body.enabled } });
+  }
   if (process.env.WHATSAPP_WEBHOOK_RELAY_URL) throw new ApiError(409, "Conversation AI controls are managed in the production inbox");
   if (typeof req.body.enabled !== "boolean") throw new ApiError(400, "Choose AI on or off");
   const updated = await Conversation.findOneAndUpdate({ _id: chat._id, store: req.store._id }, { $set: { aiEnabled: req.body.enabled }, $inc: { aiRevision: 1 } }, { new: true });
@@ -101,7 +133,8 @@ whatsappRouter.get("/conversations/:id/messages", async (req, res) => {
   const before = req.query.before;
   if (before && !mongoose.isValidObjectId(before)) throw new ApiError(400, "Invalid cursor");
   const messages = await Message.find({ store: req.store._id, conversation: chat._id, ...(before ? { _id: { $lt: before } } : {}) }).sort({ _id: -1 }).limit(100).lean();
-  const job = await AIJob.findOne({ store: req.store._id, conversation: chat._id }).sort({ createdAt: -1 }).select("status error updatedAt").lean();
+  const job = shoppingEnabled() && testRecipientAllowed(chat.phone) ? await ShoppingJob.findOne({ store: req.store._id, phone: chat.phone }).sort({ createdAt: -1 }).select("status error updatedAt").lean() : await AIJob.findOne({ store: req.store._id, conversation: chat._id }).sort({ createdAt: -1 }).select("status error updatedAt").lean();
+  if (shoppingEnabled()) for (const message of messages.filter(item => item.type === "image" && !item.mediaId)) { const imageJob = await ShoppingJob.findOne({ store: req.store._id, metaId: message.metaId }).select("mediaId").lean(); if (imageJob?.mediaId) message.mediaId = imageJob.mediaId; }
   res.json({ data: { messages: messages.reverse(), aiJob: job, canReply: windowOpen(chat.lastInboundAt), windowExpiresAt: chat.lastInboundAt ? new Date(+chat.lastInboundAt + 86400000) : null, hasMore: messages.length === 100 } });
 });
 whatsappRouter.post("/conversations/:id/messages", rateLimit({ windowMs: 60000, limit: 30, keyGenerator: req => String(req.user._id) }), async (req, res) => {
@@ -115,6 +148,7 @@ whatsappRouter.post("/conversations/:id/messages", rateLimit({ windowMs: 60000, 
   }
   if (!windowOpen(chat.lastInboundAt)) throw new ApiError(409, "The 24-hour reply window is closed. Ask the customer to message you again.");
   if (process.env.WHATSAPP_WEBHOOK_RELAY_URL && await AISettings.exists({ store: req.store._id, enabled: true })) throw new ApiError(409, "AI is active in production. Use the production inbox for manual takeover so pending automatic replies are cancelled there.");
+  if (shoppingEnabled()) await ShoppingSession.updateMany({ store: req.store._id, phone: chat.phone }, { $set: { aiEnabled: false }, $inc: { revision: 1 } });
   await Conversation.updateOne({ _id: chat._id }, { $set: { aiEnabled: false }, $inc: { aiRevision: 1 } });
   const message = await sendWhatsAppText({ chat, text, requestId, source: "admin" });
   res.json({ data: message });
