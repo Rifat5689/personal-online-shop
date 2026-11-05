@@ -104,6 +104,17 @@ unknown deliveries without automatic resend after a process crash.
 
 ## Required configuration
 
+### Ten-second customer message wait
+
+Live staging replies wait for ten seconds after the most recent new customer
+message. New messages reset pending deadlines; duplicate webhook retries do not.
+An image and following text are combined into one bounded request and one reply.
+If new input arrives during generation, the unsent draft is discarded and its
+image/context is carried to the next queued request, which observes the renewed
+deadline. This uses persistent `notBefore` values, not an in-memory timer, so a
+restart preserves waiting messages. Turning AI off still takes priority. A message
+already submitted to Meta cannot be recalled.
+
 Reuse existing `MONGODB_URI`, token secrets, `STORE_SLUG`,
 `META_WHATSAPP_ACCESS_TOKEN`, `META_WHATSAPP_PHONE_NUMBER_ID`,
 `META_APP_SECRET`, `META_GRAPH_API_VERSION`, `WHATSAPP_VERIFY_TOKEN`,
@@ -130,6 +141,8 @@ the public store origin; testing defaults to the existing testing storefront.
 7. Commit on `develop`; the existing validation workflow gates automatic testing
    deployment. Check `Deploy isolated shop` uses the `testing` environment and
    the exact validated release SHA. Production deployment is excluded.
+   Testing explicitly restarts after its package update so the Node process loads
+   the new release marker. No production restart step was added.
 8. Confirm `/api/v1/health`, public catalog, authenticated shopping preview,
    owner verification and mobile/desktop admin. Live Meta checks must use only
    the approved recipient after that person messages the business number.

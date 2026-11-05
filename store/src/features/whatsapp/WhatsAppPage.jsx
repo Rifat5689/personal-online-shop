@@ -77,6 +77,7 @@ export default function WhatsAppPage() {
           {messages.isPending && <p>Loading messages…</p>}
           {allMessages.map(m => <article key={m._id} className={`wa-message ${m.direction}`}>{m.type === "image" && <MessageImage message={m} />}<p>{m.text}</p><footer>{m.source === "ai" && <span className="wa-ai-label"><TbSparkles /> AI</span>}<time dateTime={m.timestamp} title={new Date(m.timestamp).toLocaleString()}>{time(m.timestamp)}</time><span className={`wa-message-status ${m.status}`}>{m.direction === "outbound" && ["delivered", "read"].includes(m.status) && <TbChecks aria-hidden="true" />}{m.direction === "outbound" ? m.status : "Received"}</span></footer>{m.error && <small className="wa-error">{m.error}</small>}</article>)}<div ref={bottom} />
         </div>
+        {chat.stagingTest && ["queued", "processing"].includes(messages.data?.aiJob?.status) && <p className="wa-notice" role="status">{messages.data.aiJob.status === "queued" ? "AI will reply 10 seconds after the latest customer message." : "AI is preparing a reply."}</p>}
         {messages.data?.aiJob?.error && <p className="wa-notice" role="status">{messages.data.aiJob.error}</p>}
         {productionTakeoverRequired && <p className="wa-notice">AI is active in production. Use the production inbox to take over and send a manual reply.</p>}
         <div className="wa-window">{messages.data?.canReply ? `Reply window open until ${new Date(messages.data.windowExpiresAt).toLocaleString()}` : "Reply window closed. The customer must message you again before you can send text."}</div>

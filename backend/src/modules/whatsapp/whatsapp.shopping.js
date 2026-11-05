@@ -58,14 +58,18 @@ export async function generateShoppingReply({ store, settings, history = [], pro
         if (typeof args.text !== "string" || args.text.length > 1000 || !["text", "price", "images"].includes(args.format) || typeof args.needsVerification !== "boolean" || !Array.isArray(args.productIds) || args.productIds.length > 6 || args.productIds.some(id => typeof id !== "string" || !known.has(id))) throw new ApiError(400, "AI selected an unverified product or invalid response");
         const products = [...new Set(args.productIds)].map(id => known.get(id)).filter(product => maxBudget === undefined || product.salePrice <= maxBudget);
         const intentText = String(prompt || "").replace(/https?:\/\/\S+/g, "");
-        const priceOnly = /দাম|price|dam|koto/i.test(intentText) && !/ছবি|দেখান|show|photo|image|recommend/i.test(intentText) && !wantsVerification(intentText);
+        const lastIntent = intentText.split("\n").filter(line => line.trim()).at(-1) || intentText;
+        const requestsImages = /দেখান|dekhan|show|recommend|(?:ছবি|photo|image|pic).{0,15}(?:দিন|পাঠান|send|den|dao)|(?:দিন|পাঠান|send).{0,15}(?:ছবি|photo|image|pic)/i.test(lastIntent);
+        const priceOnly = /দাম|price|dam|koto/i.test(intentText) && !requestsImages && !wantsVerification(intentText);
         const verify = wantsVerification(intentText) || (args.needsVerification && !priceOnly);
         let text = args.text.trim();
         if (verify) text = "আছে কি না যাচাই করে জানাচ্ছি। একটু সময় লাগতে পারে।";
         else if ((args.format === "price" || /দাম|price|dam|koto/i.test(prompt)) && products.length && args.format !== "images") text = products.map(product => `${products.length > 1 ? `${product.name}: ` : ""}${product.salePrice.toLocaleString("bn-BD")} টাকা।`).join("\n");
         if (args.productIds.length && !products.length && !verify) text = "এই বাজেটের মধ্যে উপযুক্ত প্রোডাক্ট পাওয়া যায়নি।";
         if (priceOnly && !products.length && !verify) text = "কোন প্রোডাক্টটির দাম জানতে চান?";
-        if (image && products.length && !verify) text = "ছবির সঙ্গে এগুলোর মিল আছে। কোনটি আপনারটি?";
+        if (image && products.length && !verify) text = priceOnly
+          ? products.map(product => `সম্ভাব্য মিল: ${product.name} — ${product.salePrice.toLocaleString("bn-BD")} টাকা।`).join("\n")
+          : "ছবির সঙ্গে এগুলোর মিল আছে। কোনটি আপনারটি?";
         if (!text && args.format !== "images") throw new ApiError(400, "AI returned an empty response");
         return { reply: text, products, format: verify ? "text" : priceOnly ? "price" : args.format, needsVerification: verify, toolsUsed: calls, searches, imageMatch: image ? "possible_only" : null, visualComparisons };
       }

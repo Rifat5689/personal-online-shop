@@ -24,7 +24,9 @@ const verification = new Schema({
 }, { timestamps: true });
 verification.index({ store: 1, session: 1, product: 1 }, { unique: true, partialFilterExpression: { status: "pending" } });
 export const AvailabilityVerification = mongoose.model("WhatsAppAvailabilityVerification", verification);
-const job = new Schema({ store: Schema.Types.ObjectId, metaId: { type: String, unique: true, required: true }, phone: String, text: String, mediaId: String, replyToMetaId: String, timestamp: Date, status: { type: String, default: "queued" }, error: String }, { timestamps: true });
+export const SHOPPING_QUIET_MS = 10000;
+const job = new Schema({ store: Schema.Types.ObjectId, session: Schema.Types.ObjectId, settingsRevision: Number, sessionRevision: Number, metaId: { type: String, unique: true, required: true }, phone: String, text: String, mediaId: String, replyToMetaId: String, timestamp: Date, notBefore: { type: Date, default: () => new Date(Date.now() + SHOPPING_QUIET_MS) }, status: { type: String, default: "queued" }, error: String }, { timestamps: true });
+job.index({ status: 1, notBefore: 1, createdAt: 1 });
 export const ShoppingJob = mongoose.model("WhatsAppShoppingJob", job);
 export function testRecipientAllowed(phone) {
   return shoppingEnabled() && /^\d{8,15}$/.test(phone || "") && (process.env.WHATSAPP_TEST_RECIPIENTS || "").split(",").includes(phone);

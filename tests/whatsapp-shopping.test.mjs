@@ -14,7 +14,7 @@ import { generateShoppingReply } from "../backend/src/modules/whatsapp/whatsapp.
 import { validateImage, downloadWhatsAppImage, downloadCatalogImage, uploadCatalogImage } from "../backend/src/modules/whatsapp/whatsapp.media.js";
 import { encryptGeminiKey } from "../backend/src/modules/whatsapp/whatsapp.gemini.js";
 import { sendShoppingResponse } from "../backend/src/modules/whatsapp/whatsapp.shopping.send.js";
-import { queueStagingEvent, processShoppingJob } from "../backend/src/modules/whatsapp/whatsapp.shopping.worker.js";
+import { queueStagingEvent, processShoppingJob, readyShoppingJobs } from "../backend/src/modules/whatsapp/whatsapp.shopping.worker.js";
 import { app } from "../backend/src/app.js";
 const settings = { model: "gemini-3.1-flash-lite", tone: "Short", instructions: "Reply in Bangla." };
 const functionResult = (name, args) => ({ candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ functionCall: { name, args } }] } }] });
@@ -76,6 +76,8 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
       }), "777");
       const result = await generateShoppingReply({ store: store._id, settings, prompt: "এই ছবিরটি", image, clientFactory: scripted([functionResult("searchProducts", { query: "oily cleanser" }), functionResult("respond", { text: "Exact match", format: "images", productIds: [String(product._id)], needsVerification: false })], args => assert.ok(args.contents.some(item => item.parts.some(part => part.inlineData)))) });
       assert.equal(result.imageMatch, "possible_only"); assert.match(result.reply, /মিল/); assert.doesNotMatch(result.reply, /Exact/);
+      const captionPrice = await generateShoppingReply({ store: store._id, settings, prompt: "ছবির প্রোডাক্টটি খুঁজে দিন।\netar dam koto", image, clientFactory: scripted([functionResult("searchProducts", { query: "oily cleanser" }), functionResult("respond", { text: "Exact match", format: "text", productIds: [String(product._id)], needsVerification: true })]) });
+      assert.equal(captionPrice.format, "price"); assert.equal(captionPrice.needsVerification, false); assert.match(captionPrice.reply, /৮৪৯.১৫/); assert.doesNotMatch(captionPrice.reply, /কোনটি|Exact/);
     });
     const base = `http://127.0.0.1:${server.address().port}/api/v1/whatsapp`;
     const headers = { Authorization: `Bearer ${admin.generateAccessToken()}`, "Content-Type": "application/json" };
@@ -137,6 +139,48 @@ test("catalog, orchestration, images, staging isolation, verification and test-o
       process.env.DATABASE_ROLE = "primary";
       assert.equal(testRecipientAllowed("8801300000000"), false); assert.equal((await call("/shopping/verifications")).status, 404);
       process.env.DATABASE_ROLE = "test";
+    });
+    await t.test("ten-second quiet window resets for new messages, ignores retries and combines photo plus price", async () => {
+      const session = await ShoppingSession.create({ store: store._id, owner: admin._id, phone: "8801300000000", aiEnabled: true });
+      const makeEvent = item => Buffer.from(JSON.stringify({ entry: [{ changes: [{ field: "messages", value: { metadata: { phone_number_id: "123456" }, messages: [{ from: "8801300000000", timestamp: String(Math.floor(Date.now() / 1000)), ...item }] } }] }] }));
+      const imageEvent = makeEvent({ id: "wamid.burst-image", type: "image", image: { id: "123" } });
+      await queueStagingEvent(imageEvent);
+      const first = await ShoppingJob.findOne({ metaId: "wamid.burst-image" });
+      assert.ok(+first.notBefore >= Date.now() + 9000);
+      assert.equal(await ShoppingJob.countDocuments({ ...readyShoppingJobs(new Date(+first.notBefore - 1)), metaId: first.metaId }), 0);
+      assert.equal(await ShoppingJob.countDocuments({ ...readyShoppingJobs(first.notBefore), metaId: first.metaId }), 1);
+      const textEvent = makeEvent({ id: "wamid.burst-price", type: "text", text: { body: "etar dam koto" } });
+      await queueStagingEvent(textEvent);
+      const afterNew = await ShoppingJob.findById(first._id);
+      assert.ok(+afterNew.notBefore >= +first.notBefore);
+      await queueStagingEvent(textEvent);
+      assert.equal(+(await ShoppingJob.findById(first._id)).notBefore, +afterNew.notBefore, "Duplicate retries must not reset the wait");
+      await ShoppingJob.updateMany({ metaId: { $in: ["wamid.burst-image", "wamid.burst-price"] } }, { $set: { notBefore: new Date(Date.now() - 1) } });
+      const job = await ShoppingJob.findOneAndUpdate({ ...readyShoppingJobs(), metaId: first.metaId }, { $set: { status: "processing" } }, { new: true });
+      let generated = 0, sends = 0;
+      await processShoppingJob(job, {
+        download: async () => validateImage(Buffer.from([255,216,255,0]), "image/jpeg"),
+        generate: async ({ prompt, image }) => { generated++; assert.match(prompt, /etar dam koto/); assert.ok(image.inlineData); return { reply: "সম্ভাব্য মিল: ৮৪৯.১৫ টাকা।", products: [], format: "price" }; },
+        send: async () => { sends++; return [{ status: "sent" }]; },
+      });
+      assert.equal(generated, 1); assert.equal(sends, 1);
+      assert.equal((await ShoppingJob.findOne({ metaId: "wamid.burst-price" })).status, "skipped");
+      assert.equal((await ShoppingJob.findById(job._id)).status, "sent");
+      assert.match((await ShoppingSession.findById(session._id)).history.at(-2).text, /etar dam koto/);
+    });
+    await t.test("new customer input during generation discards the unsent draft and carries image forward", async () => {
+      const job = await ShoppingJob.create({ store: store._id, phone: "8801300000000", metaId: "wamid.generating-image", mediaId: "123", text: "ছবির প্রোডাক্ট", timestamp: new Date(), status: "processing", notBefore: new Date() });
+      let sends = 0;
+      await processShoppingJob(job, {
+        download: async () => validateImage(Buffer.from([255,216,255,0]), "image/jpeg"),
+        generate: async () => {
+          await ShoppingJob.create({ store: store._id, phone: job.phone, metaId: "wamid.later-price", text: "এটার দাম কত?", timestamp: new Date() });
+          return { reply: "old draft", products: [], format: "text" };
+        }, send: async () => { sends++; return []; },
+      });
+      assert.equal(sends, 0); assert.equal((await ShoppingJob.findById(job._id)).status, "skipped");
+      const next = await ShoppingJob.findOne({ metaId: "wamid.later-price" });
+      assert.equal(next.mediaId, "123"); assert.match(next.text, /ছবির প্রোডাক্ট\nএটার দাম কত/); assert.ok(+next.notBefore >= Date.now() + 9000);
     });
   } finally { globalThis.fetch = originalFetch; server.close(); server.closeAllConnections(); await mongoose.disconnect(); await db.stop(); }
 });

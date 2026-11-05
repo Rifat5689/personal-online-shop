@@ -57,6 +57,9 @@ jobs:
           path: release/backend.zip
       - name: Deploy prebuilt backend
         run: az webapp deploy --resource-group encrypts_group --name "$AZURE_APP" --src-path release/backend.zip --type zip --async true --track-status false --enable-kudu-warmup false --timeout 180000 --only-show-errors --output none
+      - name: Restart testing process after package update
+        if: inputs.target != 'production'
+        run: az webapp restart --resource-group encrypts_group --name "$AZURE_APP" --only-show-errors --output none
       - name: Wait for backend readiness
         run: |
           for attempt in $(seq 1 60); do
