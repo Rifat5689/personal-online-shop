@@ -22,7 +22,8 @@ async function targetFor(req) {
 }
 async function purge(db, chat, session) {
   const filter = { store: chat.store, conversation: chat._id }, options = { session };
-  await db.collection("whatsappconversations").updateOne({ _id: chat._id, store: chat.store }, { $set: { aiEnabled: false }, $inc: { aiRevision: 1 } }, options);
+  const locked = await db.collection("whatsappconversations").updateOne({ _id: chat._id, store: chat.store }, { $set: { aiEnabled: false }, $inc: { aiRevision: 1 } }, options);
+  if (!locked.matchedCount) throw Error("Conversation changed during deletion");
   await db.collection("whatsappaijobs").deleteMany(filter, options);
   await db.collection("whatsappshoppingjobs").deleteMany({ store: chat.store, phone: chat.phone }, options);
   await db.collection("whatsappshoppingsessions").deleteMany({ store: chat.store, $or: [{ conversation: chat._id }, { phone: chat.phone }] }, options);

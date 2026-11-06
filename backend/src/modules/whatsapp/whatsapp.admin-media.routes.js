@@ -51,6 +51,7 @@ adminMediaRouter.post("/conversations/:id/media", rateLimit({ windowMs: 60000, l
     if (shoppingEnabled()) await ShoppingSession.updateMany({ store: chat.store, phone: chat.phone }, { $set: { aiEnabled: false }, $inc: { revision: 1 } });
     const mediaId = await uploadWhatsAppMedia(req.file.buffer, req.file.mimetype);
     const fresh = await Conversation.findById(chat._id);
+    if (!fresh) throw new ApiError(409, "Conversation was deleted during upload. Attachment was not sent.");
     if (await aiActive(fresh)) throw new ApiError(409, "AI was enabled during upload. Attachment was not sent.");
     return res.json({ data: await sendWhatsAppText({ chat: fresh, text, requestId, source: "admin", imageMediaId: mediaId, mediaType: type, messageRecord: message }) });
   } catch (error) {
