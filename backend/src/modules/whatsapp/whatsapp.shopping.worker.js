@@ -38,7 +38,7 @@ export async function processShoppingJob(job, { generate = generateShoppingReply
     if (!testRecipientAllowed(job.phone)) throw Error("Recipient is not approved");
     if (await ShoppingJob.countDocuments({ store: job.store, status: "sent", updatedAt: { $gt: new Date(Date.now() - 60000) } }) >= 20) throw Error("Staging message rate limit reached");
     const session = await ShoppingSession.findOne({ store: job.store, phone: job.phone, aiEnabled: true, ...(job.session ? { _id: job.session } : {}) }).sort({ createdAt: -1 });
-    const settings = await StagingAISettings.findOne({ store: job.store, enabled: true }).select("+encryptedKey");
+    const settings = await StagingAISettings.findOne({ store: job.store, enabled: true }).select("+encryptedKey +encryptedGroqKey");
     // Mirrored production controls are read-only and take precedence over staging tests.
     const production = await AISettings.findOne({ store: job.store });
     const chat = await Conversation.findOne({ store: job.store, phone: job.phone });
@@ -90,7 +90,7 @@ export async function processShoppingJob(job, { generate = generateShoppingReply
       };
       const messages = await send({ chat: target, result, requestId: `shopping-live-${job._id}`, stagingOnly: true, beforeSend });
       if (messages.some(message => !["sent", "delivered", "read"].includes(message.status))) throw Error("Meta delivery failed or is uncertain; no retry");
-      await ShoppingSession.updateOne({ _id: session._id }, { $set: { history: [...history, { direction: "inbound", text: inboundText }, { direction: "outbound", text: result.reply, products: result.products.map(p => ({ id: p.id })) }].slice(-12) } });
+      await ShoppingSession.updateOne({ _id: session._id }, { $set: { history: [...history, { direction: "inbound", text: inboundText }, { direction: "outbound", text: result.reply, products: result.products.map(p => ({ id: p.id })) }].slice(-40) }, $inc: { historyVersion: 1 } });
       await ShoppingJob.updateOne({ _id: job._id }, { $set: { status: "sent" } });
     } finally { await ShoppingSession.updateOne({ _id: session._id }, { $unset: { leaseUntil: 1 } }); }
   } catch (error) { await ShoppingJob.updateOne({ _id: job._id, status: { $ne: "skipped" } }, { $set: { status: "failed", error: shoppingFailureMessage(error) } }); }

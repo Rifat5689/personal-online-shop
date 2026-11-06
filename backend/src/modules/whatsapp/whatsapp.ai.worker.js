@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { AIJob, AISettings, Conversation, Message } from "./whatsapp.model.js";
-import { generateAIReply } from "./whatsapp.gemini.js";
+import { generateProviderReply as generateAIReply } from "./whatsapp.providers.js";
 import { sendWhatsAppText } from "./whatsapp.send.js";
 import { windowOpen } from "./whatsapp.security.js";
 export async function queueIncomingAI(message) {
@@ -10,7 +10,7 @@ export async function queueIncomingAI(message) {
 }
 async function permitted(job) {
   const [settings, chat, latest] = await Promise.all([
-    AISettings.findOne({ store: job.store }).select("+encryptedKey"),
+    AISettings.findOne({ store: job.store }).select("+encryptedKey +encryptedGroqKey"),
     Conversation.findOne({ _id: job.conversation, store: job.store }),
     Message.findOne({ store: job.store, conversation: job.conversation, direction: "inbound" }).sort({ timestamp: -1, _id: -1 }),
   ]);
@@ -29,7 +29,7 @@ export async function processAIJob(job, { generate = generateAIReply, send = sen
     if (!lease) { job.status = "queued"; job.notBefore = new Date(Date.now() + 1000); return; }
     locked = true;
     if (await Message.exists({ aiReplyTo: job.inbound })) { job.status = "skipped"; return; }
-    const history = (await Message.find({ store: job.store, conversation: job.conversation, type: "text", status: { $nin: ["failed", "unknown", "sending"] } }).sort({ timestamp: -1, _id: -1 }).limit(12).lean()).reverse();
+    const history = (await Message.find({ store: job.store, conversation: job.conversation, type: "text", status: { $nin: ["failed", "unknown", "sending"] } }).sort({ timestamp: -1, _id: -1 }).limit(40).lean()).reverse();
     const text = await generate(current.settings, history);
     current = await permitted(job);
     if (!current) { job.status = "skipped"; return; }

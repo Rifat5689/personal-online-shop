@@ -6,10 +6,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { request, errorMessage } from "../../services/api";
 export default function AISettingsPanel({ onClose, conversationId, onManualReply }) {
   const query = useQuery({ queryKey: ["whatsapp", "ai-settings"], queryFn: () => request("get", "/whatsapp/ai/settings") });
-  const [form, setForm] = useState(null), [apiKey, setApiKey] = useState(""), [models, setModels] = useState([]), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [prompt, setPrompt] = useState("Hello! Could you tell me about your business?"), [preview, setPreview] = useState("");
+  const [form, setForm] = useState(null), [apiKey, setApiKey] = useState(""), [groqApiKey, setGroqApiKey] = useState(""), [groqModels, setGroqModels] = useState([]), [groqVisionModels, setGroqVisionModels] = useState([]), [limits, setLimits] = useState(null), [models, setModels] = useState([]), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState(""), [prompt, setPrompt] = useState("Hello! Could you tell me about your business?"), [preview, setPreview] = useState("");
   const client = useQueryClient(), panel = useRef(null), loaded = useRef(false);
   const busyRef = useRef(busy), closeRef = useRef(onClose); busyRef.current = busy; closeRef.current = onClose;
-  useEffect(() => { if (query.data) { if (!loaded.current) { setForm(query.data); loaded.current = true; } else setForm(current => ({ ...current, enabled: query.data.enabled })); } }, [query.data]);
+  useEffect(() => { if (query.data) { if (!loaded.current) { setForm(query.data); setLimits(query.data.providerConnections?.[query.data.primaryProvider || "gemini"]?.limits || null); loaded.current = true; } else setForm(current => ({ ...current, enabled: query.data.enabled })); } }, [query.data]);
   useEffect(() => {
     const previous = document.activeElement;
     panel.current?.focus();
@@ -25,7 +25,7 @@ export default function AISettingsPanel({ onClose, conversationId, onManualReply
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("keydown", keydown); previous?.focus(); };
   }, []);
-  const change = (name, value) => { setForm(current => ({ ...current, [name]: value })); setNotice(""); };
+  const change = (name, value) => { setForm(current => ({ ...current, [name]: value, ...(name === "primaryProvider" && current.fallbackProvider === value ? { fallbackProvider: "none" } : {}) })); setNotice(""); };
   const toggleGlobal = async enabled => {
     setBusy(true); setError(""); setNotice("");
     try { const result = await request("patch", "/whatsapp/ai/enabled", { enabled }); change("enabled", result.enabled); client.setQueryData(["whatsapp", "ai-settings"], result); await client.invalidateQueries({ queryKey: ["whatsapp", "conversations"] }); setNotice(enabled ? "Global AI enabled. Enable individual chats to allow automatic replies." : "Global AI is off. Pending replies will be cancelled before sending."); }
@@ -40,11 +40,26 @@ export default function AISettingsPanel({ onClose, conversationId, onManualReply
       setNotice(result.models.length ? "Connection verified for model access. Save settings to verify reply generation and keep your key and model." : "No supported Flash model is available for this key.");
     } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
   };
+  const connectGroq = async () => {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const result = await request("post", "/whatsapp/ai/models", { provider: "groq", ...(groqApiKey ? { apiKey: groqApiKey } : {}) });
+      setGroqModels(result.models); setGroqVisionModels(result.visionModels || []); setLimits(result.limits);
+      if (!result.models.includes(form.groqModel)) change("groqModel", result.models.includes("openai/gpt-oss-20b") ? "openai/gpt-oss-20b" : result.models[0]);
+      if (!(result.visionModels || []).includes(form.groqVisionModel)) change("groqVisionModel", result.visionModels?.[0] || "qwen/qwen3.8-27b");
+      setNotice("Groq model access verified. Save to verify reply generation.");
+    } catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
+  };
+  const testConnection = async () => {
+    setBusy(true); setError("");
+    try { const result = await request("post", "/whatsapp/ai/connection", { provider: form.primaryProvider || "gemini" }, { timeout: 65000 }); setLimits(result.limits); setNotice("Connection and reply generation verified."); }
+    catch (err) { setError(errorMessage(err)); } finally { setBusy(false); }
+  };
   const save = async event => {
     event.preventDefault(); setBusy(true); setError(""); setNotice("");
     try {
-      const result = await request("put", "/whatsapp/ai/settings", { enabled: form.enabled, instructions: form.instructions, model: form.model, tone: form.tone, ...(apiKey ? { apiKey } : {}) }, { timeout: 80000 });
-      setForm(result); setModels(result.models || []); setApiKey("");
+      const result = await request("put", "/whatsapp/ai/settings", { enabled: form.enabled, instructions: form.instructions, model: form.model, tone: form.tone, primaryProvider: form.primaryProvider || "gemini", fallbackProvider: form.fallbackProvider || "none", groqModel: form.groqModel || "openai/gpt-oss-20b", groqVisionModel: form.groqVisionModel || "qwen/qwen3.8-27b", ...(groqApiKey ? { groqApiKey } : {}), ...(apiKey ? { apiKey } : {}) }, { timeout: 80000 });
+      setForm(result); setModels(result.models || []); setApiKey(""); setGroqApiKey("");
       client.setQueryData(["whatsapp", "ai-settings"], result);
       await client.invalidateQueries({ queryKey: ["whatsapp", "conversations"] });
       setNotice("Settings saved.");
@@ -62,8 +77,14 @@ export default function AISettingsPanel({ onClose, conversationId, onManualReply
       {query.isError && <p className="wa-error" role="alert">{errorMessage(query.error)}</p>}
       {form && <form onSubmit={save} className="wa-settings-form">
         <div className="wa-setting-switch"><div><strong>AI auto reply</strong><p>{form.stagingSettings ? "Testing settings are separate. Only the approved personal test recipient receives replies, 10 seconds after their last message." : form.autoRepliesAvailable === false ? "This inbox mirrors production. Live conversation controls remain in production." : "Only chats you explicitly enable receive automatic replies."}</p></div><input aria-label="Global AI Auto Reply" type="checkbox" role="switch" checked={form.enabled} onChange={event => toggleGlobal(event.target.checked)} disabled={busy || (form.autoRepliesAvailable === false && !form.stagingSettings)} /></div>
-        <div className="wa-setting-section"><label htmlFor="wa-api-key"><TbKey aria-hidden="true" /> Gemini API key</label><input id="wa-api-key" type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={event => { setApiKey(event.target.value); setNotice(""); }} placeholder={form.keyConfigured ? "Key saved · enter a new key to replace it" : "Paste your Gemini API key"} disabled={busy} />
-          <div className="wa-connection-row"><span className={form.connectionState === "connected" ? "connected" : ""}>{form.connectionState === "connected" ? "● Connected" : form.keyConfigured ? "● Key configured" : "○ Not connected"}</span><button type="button" onClick={connect} disabled={busy || (!apiKey && !form.keyConfigured)}>Check connection</button></div><small>Your saved key is never displayed. Paste a key, check the connection, then save.</small>
+        <div className="wa-setting-grid"><div><label htmlFor="wa-provider">Primary AI provider</label><select id="wa-provider" value={form.primaryProvider || "gemini"} onChange={event => change("primaryProvider", event.target.value)} disabled={busy}><option value="groq">Groq</option><option value="gemini">Gemini</option></select></div><div><label htmlFor="wa-fallback">Fallback provider</label><select id="wa-fallback" value={form.fallbackProvider || "none"} onChange={event => change("fallbackProvider", event.target.value)} disabled={busy}><option value="none">Disabled</option>{["groq", "gemini"].filter(id => id !== (form.primaryProvider || "gemini")).map(id => <option key={id} value={id}>{id === "groq" ? "Groq" : "Gemini"}</option>)}</select></div></div>
+        <div className="wa-setting-section"><label htmlFor="wa-groq-key">Groq API key</label><input id="wa-groq-key" type="password" autoComplete="new-password" spellCheck={false} value={groqApiKey} onChange={event => setGroqApiKey(event.target.value)} placeholder={form.groqKeyConfigured ? "Key saved ? enter a replacement" : "Paste your Groq API key"} disabled={busy} /><div className="wa-connection-row"><span>{form.providerConnections?.groq?.state === "connected" ? "Groq connected" : form.groqKeyConfigured ? "Groq key configured" : "Groq not connected"}</span><button type="button" onClick={connectGroq} disabled={busy || (!groqApiKey && !form.groqKeyConfigured)}>Retrieve Groq models</button></div></div>
+        <div className="wa-setting-grid">{[["groqModel", "Groq text model", "openai/gpt-oss-20b"], ["groqVisionModel", "Groq vision model", "qwen/qwen3.8-27b"]].map(([field, label, defaultModel]) => <div key={field}><label htmlFor={field}>{label}</label><select id={field} value={form[field] || defaultModel} onChange={event => change(field, event.target.value)} disabled={busy}>{[...new Set([form[field] || defaultModel, ...(field === "groqVisionModel" ? groqVisionModels : groqModels)])].map(id => <option key={id} value={id}>{id}</option>)}</select></div>)}</div>
+        <button type="button" className="wa-secondary" onClick={testConnection} disabled={busy}>Test Connection</button>
+        <p role="status">Primary provider: {form.primaryProvider || "gemini"} ? {form.providerConnections?.[form.primaryProvider || "gemini"]?.state || ((form.primaryProvider || "gemini") === "gemini" ? form.connectionState : "unconfigured") || "unconfigured"}</p>
+        {limits && Object.keys(limits).length > 0 ? <dl>{Object.entries(limits).map(([name, value]) => <React.Fragment key={name}><dt>{name.replace("x-ratelimit-", "")}</dt><dd>{value}</dd></React.Fragment>)}</dl> : <small>Account limits are shown only when returned by the provider. Unknown limits are not estimated.</small>}
+        <div className="wa-setting-section"><label htmlFor="wa-api-key"><TbKey aria-hidden="true" /> Gemini API key</label><input id="wa-api-key" type="password" autoComplete="new-password" spellCheck={false} value={apiKey} onChange={event => { setApiKey(event.target.value); setNotice(""); }} placeholder={(form.geminiKeyConfigured ?? form.keyConfigured) ? "Key saved · enter a new key to replace it" : "Paste your Gemini API key"} disabled={busy} />
+          <div className="wa-connection-row"><span className={form.connectionState === "connected" ? "connected" : ""}>{form.connectionState === "connected" ? "● Connected" : form.keyConfigured ? "● Key configured" : "○ Not connected"}</span><button type="button" onClick={connect} disabled={busy || (!apiKey && !(form.geminiKeyConfigured ?? form.keyConfigured))}>Check connection</button></div><small>Your saved key is never displayed. Paste a key, check the connection, then save.</small>
         </div>
         <div className="wa-setting-grid"><div><label htmlFor="wa-model">Gemini model</label><select id="wa-model" value={form.model} onChange={event => change("model", event.target.value)} disabled={busy}>{[...new Set([form.model, ...models])].filter(Boolean).map(model => <option key={model} value={model}>{model}</option>)}</select></div><div><label htmlFor="wa-tone">Reply tone</label><select id="wa-tone" value={form.tone} onChange={event => change("tone", event.target.value)} disabled={busy}>{["Friendly", "Professional", "Short"].map(tone => <option key={tone}>{tone}</option>)}</select></div></div>
         <div className="wa-setting-section"><label htmlFor="wa-personality">About Me / AI Personality &amp; Instructions</label><p className="wa-field-help">Write freely about yourself, your business, preferred language and how you want replies to sound. Include only facts the assistant should use.</p><textarea id="wa-personality" rows={12} maxLength={12000} value={form.instructions} onChange={event => change("instructions", event.target.value)} disabled={busy} placeholder="About me and my business…&#10;&#10;Preferred language and communication style…&#10;&#10;How to answer customers and when to ask for my help…" /><small>{form.instructions.length.toLocaleString()} / 12,000 characters · Sent as the system instruction with every AI reply.</small></div>

@@ -52,3 +52,36 @@ export async function uploadCatalogImage(address, fetcher = fetch) {
     const result = await response.json(); return /^\d+$/.test(result.id || "") ? result.id : null;
   } catch { return null; }
 }
+export function validateAdminMedia(bytes, mime) {
+  if (["image/jpeg", "image/png"].includes(mime)) { validateImage(bytes, mime); return "image"; }
+  if (mime !== "video/mp4" || !bytes.length || bytes.length > 16 * 1024 * 1024 || bytes.toString("ascii", 4, 8) !== "ftyp" || !bytes.includes(Buffer.from("avc1"))) throw new ApiError(400, "Use JPEG/PNG up to 5 MB or an H.264 MP4 video up to 16 MB (AAC audio if present)");
+  return "video";
+}
+export async function uploadWhatsAppMedia(bytes, mime, fetcher = fetch) {
+  validateAdminMedia(bytes, mime);
+  const token = process.env.META_WHATSAPP_ACCESS_TOKEN, phone = process.env.META_WHATSAPP_PHONE_NUMBER_ID, version = process.env.META_GRAPH_API_VERSION;
+  if (!token || !/^\d+$/.test(phone || "") || !/^v\d+\.0$/.test(version || "")) throw new ApiError(503, "WhatsApp media is not configured");
+  const form = new FormData(); form.append("messaging_product", "whatsapp"); form.append("type", mime);
+  form.append("file", new Blob([bytes], { type: mime }), mime === "video/mp4" ? "video.mp4" : mime === "image/png" ? "photo.png" : "photo.jpg");
+  try {
+    const response = await fetcher(`https://graph.facebook.com/${version}/${phone}/media`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form, signal: AbortSignal.timeout(25000) });
+    const result = await response.json();
+    if (!response.ok || !/^\d{1,80}$/.test(result.id || "")) throw Error("Rejected");
+    return result.id;
+  } catch { throw new ApiError(502, "Media upload failed. No customer message was sent."); }
+}
+export async function downloadWhatsAppVideo(mediaId, fetcher = fetch) {
+  if (!/^\d{1,80}$/.test(mediaId || "")) throw new ApiError(400, "Invalid media reference");
+  const token = process.env.META_WHATSAPP_ACCESS_TOKEN, version = process.env.META_GRAPH_API_VERSION;
+  const options = { headers: { Authorization: `Bearer ${token}` }, redirect: "error", signal: AbortSignal.timeout(15000) };
+  const meta = await fetcher(`https://graph.facebook.com/${version}/${mediaId}`, options);
+  if (!meta.ok) throw new ApiError(404, "Video unavailable or expired");
+  const data = await meta.json(); let url;
+  try { url = new URL(data.url); } catch { throw new ApiError(400, "Invalid media URL"); }
+  if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443") || !["facebook.com", "fbcdn.net", "fbsbx.com"].some(host => url.hostname === host || url.hostname.endsWith(`.${host}`)) || data.mime_type !== "video/mp4" || !Number.isFinite(Number(data.file_size)) || Number(data.file_size) > 16 * 1024 * 1024) throw new ApiError(400, "Unsupported Meta video");
+  const response = await fetcher(url.href, options);
+  if (!response.ok || Number(response.headers.get("content-length")) > 16 * 1024 * 1024) throw new ApiError(404, "Video unavailable or expired");
+  const chunks = []; let size = 0;
+  for await (const chunk of response.body) { size += chunk.length; if (size > 16 * 1024 * 1024) throw new ApiError(400, "Video exceeds 16 MB"); chunks.push(chunk); }
+  return Buffer.concat(chunks);
+}

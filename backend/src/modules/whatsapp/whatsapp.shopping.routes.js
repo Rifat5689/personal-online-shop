@@ -41,7 +41,7 @@ shoppingRouter.post("/sessions/:id/preview", upload.single("image"), async (req,
   const prompt = req.body?.prompt || (req.file ? "ছবির প্রোডাক্টটি খুঁজে দিন।" : "");
   if (typeof prompt !== "string" || !prompt.trim() || prompt.length > 2000) throw new ApiError(400, "Enter a customer message under 2000 characters");
   if (!session.aiEnabled) throw new ApiError(409, "Human takeover is active for this test session");
-  const settings = await settingsModel().findOne({ store: req.store._id }).select("+encryptedKey");
+  const settings = await settingsModel().findOne({ store: req.store._id }).select("+encryptedKey +encryptedGroqKey");
   if (!settings?.instructions?.trim()) throw new ApiError(400, "Save AI settings first");
   const claimed = await ShoppingSession.findOneAndUpdate({ _id: session._id, $or: [{ leaseUntil: null }, { leaseUntil: { $lt: new Date() } }] }, { $set: { leaseUntil: new Date(Date.now() + 70000) } });
   if (!claimed) throw new ApiError(409, "A response is already being generated");
@@ -50,8 +50,8 @@ shoppingRouter.post("/sessions/:id/preview", upload.single("image"), async (req,
     const result = await generateShoppingReply({ store: req.store._id, settings, history: session.history, prompt, image });
     const fresh = await ShoppingSession.findById(session._id);
     if (!fresh.aiEnabled || fresh.revision !== session.revision) throw new ApiError(409, "AI was stopped during generation");
-    const history = [...session.history, { direction: "inbound", text: prompt, type: image ? "image" : "text" }, { direction: "outbound", text: result.reply, products: result.products.map(p => ({ id: p.id })), format: result.format }].slice(-12);
-    await ShoppingSession.updateOne({ _id: session._id, revision: session.revision }, { $set: { history } });
+    const history = [...session.history, { direction: "inbound", text: prompt, type: image ? "image" : "text" }, { direction: "outbound", text: result.reply, products: result.products.map(p => ({ id: p.id })), format: result.format }].slice(-40);
+    await ShoppingSession.updateOne({ _id: session._id, revision: session.revision }, { $set: { history }, $inc: { historyVersion: 1 } });
     if (result.needsVerification) for (const product of result.products.length ? result.products : [{ id: null, name: "Customer request" }]) {
       await AvailabilityVerification.updateOne({ store: req.store._id, session: session._id, product: product.id, status: "pending" }, { $setOnInsert: { conversation: session.conversation, customer: session.phone || "Admin test session", productName: product.name } }, { upsert: true }).catch(error => { if (error.code !== 11000) throw error; });
     }
@@ -66,9 +66,9 @@ shoppingRouter.post("/sessions/:id/send", async (req, res) => {
   const last = session.history.at(-1);
   if (!last || last.direction !== "outbound") throw new ApiError(400, "Generate a test preview first");
   // Atomic revision claim makes repeated send clicks idempotent.
-  const claimed = await ShoppingSession.findOneAndUpdate({ _id: session._id, revision: session.revision, lastSentLength: { $ne: session.history.length } }, { $inc: { revision: 1 }, $set: { aiEnabled: false, lastSentLength: session.history.length } });
+  const claimed = await ShoppingSession.findOneAndUpdate({ _id: session._id, revision: session.revision, lastSentVersion: { $ne: session.historyVersion } }, { $inc: { revision: 1 }, $set: { aiEnabled: false, lastSentVersion: session.historyVersion } });
   if (!claimed) throw new ApiError(409, "Test response already claimed");
-  const result = await sendShoppingResponse({ chat, result: { reply: last.text, products: last.products || [], format: last.format }, requestId: `shopping-${session._id}-${session.history.length}`, stagingOnly: true });
+  const result = await sendShoppingResponse({ chat, result: { reply: last.text, products: last.products || [], format: last.format }, requestId: `shopping-${session._id}-${session.historyVersion}`, stagingOnly: true });
   res.json({ data: { messages: result } });
 });
 shoppingRouter.get("/verifications", async (req, res) => {

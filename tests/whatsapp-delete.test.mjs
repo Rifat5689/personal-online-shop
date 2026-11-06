@@ -1,0 +1,60 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import bcrypt from "../backend/node_modules/bcryptjs/index.js";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
+import mongoose from "../backend/node_modules/mongoose/index.js";
+import Store from "../backend/src/modules/store/store.model.js";
+import User from "../backend/src/modules/user/user.model.js";
+import { Conversation, Message, AISettings, AIJob, Receipt } from "../backend/src/modules/whatsapp/whatsapp.model.js";
+import { ShoppingSession, ShoppingJob, AvailabilityVerification } from "../backend/src/modules/whatsapp/whatsapp.shopping.models.js";
+import { app } from "../backend/src/app.js";
+test("shared chat deletion requires production authentication and atomically removes only the selected chat", { timeout: 60000 }, async () => {
+  Object.assign(process.env, { NODE_ENV: "test", DATABASE_ROLE: "test", STORE_SLUG: "originsofbeauty", ACCESS_TOKEN_SECRET: "delete-chat-tests" });
+  const db = await MongoMemoryReplSet.create({ replSet: { count: 1 }, binary: { version: "7.0.14" } });
+  await mongoose.connect(db.getUri(), { dbName: "personalshop_originsofbeauty_test" });
+  const server = app.listen(0), production = mongoose.connection.getClient().db("personalshop_originsofbeauty");
+  try {
+    const store = await Store.create({ name: "QA", slug: "originsofbeauty" });
+    const admin = await User.create({ username: "demouser", email: "delete@example.test", password: "123456", role: "ADMIN", tenantId: store._id });
+    const productionStore = new mongoose.Types.ObjectId(), productionChat = new mongoose.Types.ObjectId();
+    await production.collection("stores").insertOne({ _id: productionStore, slug: "originsofbeauty" });
+    await production.collection("users").insertOne({ username: "origins", role: "ADMIN", tenantId: productionStore, password: await bcrypt.hash("640008", 10), isActive: true });
+    await production.collection("whatsappaisettings").insertOne({ store: productionStore, enabled: true });
+    const chat = await Conversation.create({ store: store._id, phone: "8801300000000", aiEnabled: true });
+    const other = await Conversation.create({ store: store._id, phone: "8801300000001" });
+    const message = await Message.create({ store: store._id, conversation: chat._id, direction: "inbound", timestamp: new Date(), metaId: "wamid.delete" });
+    await Receipt.create({ store: store._id, metaId: message.metaId, status: "read" });
+    await AIJob.create({ store: store._id, conversation: chat._id, inbound: message._id });
+    const session = await ShoppingSession.create({ store: store._id, owner: admin._id, phone: chat.phone, conversation: chat._id });
+    await ShoppingJob.create({ store: store._id, phone: chat.phone, session: session._id, metaId: "wamid.job" });
+    await AvailabilityVerification.create({ store: store._id, session: session._id, conversation: chat._id, customer: chat.phone });
+    await production.collection("whatsappconversations").insertMany([{ _id: productionChat, store: productionStore, phone: chat.phone, aiEnabled: true }, { store: productionStore, phone: other.phone }]);
+    await production.collection("whatsappmessages").insertOne({ store: productionStore, conversation: productionChat, metaId: "wamid.production-delete" });
+    await production.collection("whatsappreceipts").insertOne({ store: productionStore, metaId: "wamid.production-delete" });
+    const root = `http://127.0.0.1:${server.address().port}/api/v1/whatsapp/conversations/`, headers = { Authorization: `Bearer ${admin.generateAccessToken()}`, "Content-Type": "application/json" };
+    const call = (id, body) => fetch(root + id, { method: "DELETE", headers, body: JSON.stringify(body) });
+    const scope = await (await fetch(root + chat._id + "/delete-scope", { headers })).json();
+    assert.equal(scope.data.scope, "production-and-staging"); assert.equal(scope.data.requiresProductionAuthentication, true);
+    assert.equal((await call(chat._id, {})).status, 400);
+    assert.equal((await call(chat._id, { confirmed: true, productionUsername: "demouser", productionPassword: "123456" })).status, 403);
+    assert.equal((await call(chat._id, { confirmed: true, productionUsername: "origins", productionPassword: "000000" })).status, 403);
+    assert.equal(await Conversation.countDocuments(), 2); assert.equal(await production.collection("whatsappmessages").countDocuments(), 1);
+    const success = await call(chat._id, { confirmed: true, productionUsername: "origins", productionPassword: "640008" }); assert.equal(success.status, 200);
+    assert.equal(JSON.stringify(await success.json()).includes("640008"), false);
+    assert.equal(await Conversation.countDocuments(), 1); assert.equal(await production.collection("whatsappconversations").countDocuments(), 1);
+    for (const Model of [Message, Receipt, AIJob, ShoppingSession, ShoppingJob, AvailabilityVerification]) assert.equal(await Model.countDocuments(), 0);
+    assert.equal(await production.collection("whatsappmessages").countDocuments(), 0); assert.equal(await production.collection("whatsappreceipts").countDocuments(), 0);
+    assert.equal((await production.collection("whatsappaisettings").findOne()).enabled, true);
+    const local = await (await fetch(root + other._id + "/delete-scope", { headers })).json(); assert.equal(local.data.scope, "production-and-staging");
+    const stagingOnly = await Conversation.create({ store: store._id, phone: "8801300000099" });
+    assert.equal((await call(stagingOnly._id, { confirmed: true })).status, 200);
+    const rollbackChat = await Conversation.create({ store: store._id, phone: "8801300000088", aiEnabled: true });
+    await production.collection("whatsappconversations").insertOne({ store: productionStore, phone: rollbackChat.phone, aiEnabled: true });
+    const localDb = mongoose.connection.db, collection = localDb.collection;
+    localDb.collection = function (name, ...args) { const result = collection.call(this, name, ...args); if (name === "whatsappmessages") result.deleteMany = async () => { throw Error("Simulated local failure"); }; return result; };
+    try { assert.equal((await call(rollbackChat._id, { confirmed: true, productionUsername: "origins", productionPassword: "640008" })).status, 503); }
+    finally { localDb.collection = collection; }
+    assert.equal(await Conversation.countDocuments({ _id: rollbackChat._id }), 1);
+    assert.equal((await production.collection("whatsappconversations").findOne({ phone: rollbackChat.phone })).aiEnabled, true);
+  } finally { server.close(); server.closeAllConnections(); await mongoose.disconnect(); await db.stop(); }
+});

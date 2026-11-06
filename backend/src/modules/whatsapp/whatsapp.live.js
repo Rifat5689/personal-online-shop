@@ -11,7 +11,7 @@ export function createChatTicket(user, store) {
 
 export function attachWhatsAppLive(server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 2048, perMessageDeflate: false });
-  let stream, retry, stopped = false;
+  let stream, opening, retry, stopped = false;
   const send = (socket, event) => {
     if (socket.readyState !== WebSocket.OPEN) return;
     if (socket.bufferedAmount > 64000) return socket.terminate();
@@ -20,9 +20,16 @@ export function attachWhatsAppLive(server) {
   const broadcast = (event, storeId) => {
     for (const socket of wss.clients) if (socket.chatIdentity && (!storeId || socket.chatIdentity.storeId === storeId)) send(socket, event);
   };
-  const watch = () => {
+  const watch = async () => {
     if (stopped || stream || mongoose.connection.readyState !== 1 || !wss.clients.size) return;
-    stream = mongoose.connection.watch([{ $match: { "ns.coll": { $in: ["whatsappconversations", "whatsappmessages", "whatsappaisettings", "whatsappaijobs", "whatsappstagingaisettings", "whatsappavailabilityverifications"] } } }], { fullDocument: "updateLookup", maxAwaitTimeMS: 1000 });
+    if (opening) return opening;
+    opening = (async () => {
+    // Capture a server operation boundary before advertising readiness. A lazy
+    // change-stream cursor must still observe writes made immediately after auth.
+    const hello = await mongoose.connection.db.command({ hello: 1 });
+    if (stopped) return;
+    const startAtOperationTime = hello.operationTime || hello.$clusterTime?.clusterTime;
+    stream = mongoose.connection.watch([{ $match: { "ns.coll": { $in: ["whatsappconversations", "whatsappmessages", "whatsappaisettings", "whatsappaijobs", "whatsappstagingaisettings", "whatsappavailabilityverifications", "whatsappshoppingjobs", "whatsappshoppingsessions"] } } }], { fullDocument: "updateLookup", maxAwaitTimeMS: 1000, ...(startAtOperationTime ? { startAtOperationTime } : {}) });
     stream.on("change", event => {
       const storeId = event.fullDocument?.store && String(event.fullDocument.store);
       // Notifications carry no message text. Every data read still passes HTTP admin auth.
@@ -33,8 +40,10 @@ export function attachWhatsAppLive(server) {
       void previous?.close().catch(() => {});
       broadcast({ type: "unavailable" });
       clearTimeout(retry);
-      if (!stopped) retry = setTimeout(() => { watch(); broadcast({ type: "resync" }); }, 5000);
+      if (!stopped) retry = setTimeout(() => { void watch().then(() => broadcast({ type: "resync" })).catch(() => broadcast({ type: "unavailable" })); }, 5000);
     });
+    })();
+    try { await opening; } finally { opening = null; }
   };
   const upgrade = (req, socket, head) => {
     if (req.url !== "/api/v1/whatsapp/live") return;
@@ -75,7 +84,7 @@ export function attachWhatsAppLive(server) {
         if (socket.readyState !== WebSocket.OPEN) return;
         socket.chatIdentity = { userId: claims.userId, storeId: claims.storeId };
         clearTimeout(authTimer);
-        watch();
+        await watch();
         send(socket, { type: "ready" });
       } catch { socket.close(1008, "Invalid authentication"); }
     });

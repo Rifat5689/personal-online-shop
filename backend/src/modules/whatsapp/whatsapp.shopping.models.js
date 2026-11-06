@@ -10,7 +10,7 @@ const session = new Schema({
   owner: { type: Schema.Types.ObjectId, required: true },
   conversation: Schema.Types.ObjectId,
   phone: String, aiEnabled: { type: Boolean, default: true },
-  revision: { type: Number, default: 0 }, leaseUntil: Date, lastSentLength: Number,
+  revision: { type: Number, default: 0 }, leaseUntil: Date, lastSentLength: Number, historyVersion: { type: Number, default: 0 }, lastSentVersion: { type: Number, default: -1 },
   history: { type: [Schema.Types.Mixed], default: [] },
 }, { timestamps: true });
 export const ShoppingSession = mongoose.model("WhatsAppShoppingSession", session);

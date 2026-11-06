@@ -1,3 +1,5 @@
+import { deleteChatRouter } from "./whatsapp.delete.routes.js";
+import { adminMediaRouter } from "./whatsapp.admin-media.routes.js";
 import express from "express";
 import mongoose from "mongoose";
 import { rateLimit } from "express-rate-limit";
@@ -49,13 +51,13 @@ webhookRouter.post("/", express.raw({ type: "application/json", limit: "1mb" }),
       if (!item.id || !/^\d{6,20}$/.test(item.from)) continue;
       const timestamp = new Date(Number(item.timestamp) * 1000);
       if (!Number.isFinite(timestamp.getTime()) || timestamp.getTime() > Date.now() + 60000) continue;
-      const text = item.type === "text" ? String(item.text?.body || "") : `[${item.type || "unsupported"} message]`;
+      const text = item.type === "text" ? String(item.text?.body || "") : item[item.type]?.caption || `[${item.type || "unsupported"} message]`;
       let chat;
       try {
         chat = await Conversation.findOneAndUpdate({ store: store._id, phone: item.from }, { $setOnInsert: { name: value.contacts?.find(c => c.wa_id === item.from)?.profile?.name || item.from } }, { upsert: true, new: true });
       } catch (err) { if (err.code !== 11000) throw err; chat = await Conversation.findOne({ store: store._id, phone: item.from }); }
       const aiSettings = item.type === "text" && chat.aiEnabled ? await AISettings.findOne({ store: store._id }) : null;
-      await Message.updateOne({ metaId: item.id }, { $setOnInsert: { store: store._id, conversation: chat._id, direction: "inbound", source: "customer", text, mediaId: item.type === "image" ? item.image?.id : undefined, replyToMetaId: item.context?.id, type: item.type, status: "received", timestamp, aiEligible: Boolean(aiSettings?.enabled && chat.aiEnabled), aiSettingsRevision: aiSettings?.revision, aiChatRevision: chat.aiRevision } }, { upsert: true }).catch(err => { if (err.code !== 11000) throw err; });
+      await Message.updateOne({ metaId: item.id }, { $setOnInsert: { store: store._id, conversation: chat._id, direction: "inbound", source: "customer", text, mediaId: ["image", "video"].includes(item.type) ? item[item.type]?.id : undefined, replyToMetaId: item.context?.id, type: item.type, status: "received", timestamp, aiEligible: Boolean(aiSettings?.enabled && chat.aiEnabled), aiSettingsRevision: aiSettings?.revision, aiChatRevision: chat.aiRevision } }, { upsert: true }).catch(err => { if (err.code !== 11000) throw err; });
       // Safe to repeat after a partial webhook failure; older retries cannot rewind the window or preview.
       await Conversation.updateOne({ _id: chat._id }, { $max: { lastInboundAt: timestamp } });
       await Conversation.updateOne({ _id: chat._id, $or: [{ lastMessageAt: { $lte: timestamp } }, { lastMessageAt: null }] }, { $set: { lastMessageAt: timestamp, preview: text.slice(0, 160) } });
@@ -80,6 +82,8 @@ webhookRouter.post("/", express.raw({ type: "application/json", limit: "1mb" }),
 
 export const whatsappRouter = express.Router();
 whatsappRouter.use(verifyJwt, requireRoles("ADMIN", "ECO"), requireTenant);
+whatsappRouter.use(adminMediaRouter);
+whatsappRouter.use(deleteChatRouter);
 whatsappRouter.use("/ai", aiRouter);
 whatsappRouter.use("/shopping", shoppingRouter);
 whatsappRouter.get("/messages/:id/image", async (req, res) => {
@@ -132,6 +136,7 @@ whatsappRouter.get("/conversations/:id/messages", async (req, res) => {
   const chat = await getChat(req);
   const before = req.query.before;
   if (before && !mongoose.isValidObjectId(before)) throw new ApiError(400, "Invalid cursor");
+  await Message.updateMany({ store: req.store._id, conversation: chat._id, source: "admin", type: { $in: ["image", "video"] }, status: { $in: ["uploading", "sending"] }, createdAt: { $lt: new Date(Date.now() - 120000) } }, { $set: { status: "unknown", error: "Attachment delivery could not be confirmed after an interruption. Verify before sending again." } });
   const messages = await Message.find({ store: req.store._id, conversation: chat._id, ...(before ? { _id: { $lt: before } } : {}) }).sort({ _id: -1 }).limit(100).lean();
   const job = shoppingEnabled() && testRecipientAllowed(chat.phone) ? await ShoppingJob.findOne({ store: req.store._id, phone: chat.phone }).sort({ createdAt: -1 }).select("status error updatedAt").lean() : await AIJob.findOne({ store: req.store._id, conversation: chat._id }).sort({ createdAt: -1 }).select("status error updatedAt").lean();
   if (shoppingEnabled()) for (const message of messages.filter(item => item.type === "image" && !item.mediaId)) { const imageJob = await ShoppingJob.findOne({ store: req.store._id, metaId: message.metaId }).select("mediaId").lean(); if (imageJob?.mediaId) message.mediaId = imageJob.mediaId; }
@@ -143,7 +148,7 @@ whatsappRouter.post("/conversations/:id/messages", rateLimit({ windowMs: 60000, 
   if (typeof text !== "string" || !text.trim() || text.length > 4096 || !/^[a-f0-9-]{36}$/i.test(requestId || "")) throw new ApiError(400, "Text (1–4096 characters) and a unique request ID are required");
   const previous = await Message.findOne({ store: req.store._id, requestId });
   if (previous) {
-    if (String(previous.conversation) !== String(chat._id) || previous.text !== text.trim()) throw new ApiError(409, "Request ID already used for another message");
+    if (String(previous.conversation) !== String(chat._id) || previous.type !== "text" || previous.text !== text.trim()) throw new ApiError(409, "Request ID already used for another message");
     return res.json({ data: previous });
   }
   if (!windowOpen(chat.lastInboundAt)) throw new ApiError(409, "The 24-hour reply window is closed. Ask the customer to message you again.");

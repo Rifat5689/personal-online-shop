@@ -6,13 +6,15 @@ import ApiError from "../../utils/ApiError.js";
 const groups = [
   ["facewash", "face wash", "cleanser", "ফেসওয়াশ", "ফেসওয়াশ", "ফেস ওয়াশ"],
   ["oily", "oil control", "তৈলাক্ত", "অয়েলি", "অয়েলি"],
-  ["dry", "শুষ্ক", "ড্রাই"], ["bag", "handbag", "ব্যাগ", "হ্যান্ডব্যাগ"],
+  ["dry", "শুষ্ক", "ড্রাই"], ["bag", "handbag", "pouch", "ব্যাগ", "হ্যান্ডব্যাগ"],
+  ["cosmetic", "cosmetics", "makeup", "মেকআপ", "কসমেটিকস"],
+  ["transparent", "clear", "see-through", "স্বচ্ছ", "ট্রান্সপারেন্ট"],
   ["pink", "গোলাপি", "পিংক"], ["sunscreen", "sun screen", "সানস্ক্রিন", "spf"],
   ["serum", "সিরাম"], ["moisturizer", "ময়েশ্চারাইজার", "ময়েশ্চারাইজার"],
   ["earrings", "earring", "ear rings", "ear ring", "কানের দুল", "কানেরদুল", "দুল", "kan er jinish", "kaner jinish", "kaner dul", "kan er dul"],
 ];
 const escape = value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const stop = new Set("apu apni ache ase er jonno ta tar dekhan dekhান koto dam price please show me for the a an আছে আপু জন্য দাম কত দেখান টাকা মধ্যে takar moddhe hbe hobe hobey ???".split(" "));
+const stop = new Set("can could you your have do any some items item products product recommend suggest send pictures photos images under within budget maximum amake amar hobe moddhe takar apu apni ache ase er jonno ta tar dekhan dekhান koto dam price please show me for the a an আছে আপু জন্য দাম কত দেখান টাকা মধ্যে takar moddhe hbe hobe hobey ???".split(" "));
 export function queryGroups(value) {
   if (typeof value !== "string" || value.length > 200) throw new ApiError(400, "Search must be text under 200 characters");
   const query = value.toLowerCase().normalize("NFKC");

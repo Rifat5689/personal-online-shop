@@ -31,6 +31,51 @@ settings are read-only; staging takeover has separate session revisions.
 
 ## Gemini and retrieval
 
+### Provider selection and token use
+
+Staging AI settings support Groq and Gemini through a shared content/tool adapter.
+The business instructions live in `whatsapp.instructions.js`; catalog validation,
+conversation history, human verification and the WhatsApp send boundary are shared.
+Groq uses separate text and vision selections. Current defaults are
+`openai/gpt-oss-20b` and `qwen/qwen3.8-27b`; model access is checked against the live
+provider list. Vision selection is limited to models with documented image input
+and tool support. Available models can change.
+
+Groq keys use the existing backend AES-256-GCM encryption key and a separate
+`select: false` database field. Settings responses contain only configured flags,
+model names, connection metadata and safe rate-limit headers. Saved keys never
+return to the client. Test Connection verifies actual generation as well as model
+access; unknown quota values are labelled unknown rather than estimated. Gemini
+does not expose account quotas through its model-list API.
+
+Choose a primary provider and an optional different fallback. Rate limits,
+timeouts and temporary server failures can switch providers during generation.
+Authentication, invalid input and product-validation failures do not trigger an
+automatic retry. A short Groq `retry-after` can be honoured once within the request
+deadline. Generation uses bounded timeouts; fallback never repeats a WhatsApp send.
+No automatic rotation between Gemini models is implemented.
+
+The common instructions are 42% shorter by character count than the previous
+template. Simple, unambiguous price questions use a fresh tenant-scoped product
+lookup with no model call. Model tool responses omit storage/image URL repetition,
+use short search descriptions, and retain fuller descriptions for explicit product
+details. Recent conversation text has a 12,000-character budget across up to forty
+entries; persisted recommendation IDs are still revalidated separately. Recognized
+short product requests can be prefetched from the catalog to reduce model search
+rounds. Groq uses low/no reasoning and at most 1,024 output tokens per round.
+
+`scripts/check-groq-staging.mjs` accepts Azure test settings JSON on stdin and
+`GROQ_API_KEY` in the process environment. It checks real Groq replies without
+fallback so that Gemini cannot mask a failing Groq test. `--image` also tests
+vision; `--configure` saves only the isolated staging settings after all requested
+cases succeed. It does not send WhatsApp messages or modify production settings.
+The process reports safe error codes/limits and persists completed cases under
+ignored `artifacts/`. Do not put a real key in source, command output or reports.
+
+Provider references: [Groq vision](https://console.groq.com/docs/vision),
+[Groq limits](https://console.groq.com/docs/rate-limits),
+[Qwen reasoning controls](https://console.groq.com/docs/model/qwen/qwen3.8-27b).
+
 `whatsapp.catalog.js` is the read-only retrieval adapter and the future semantic
 search extension point. Tools are `searchProducts`, `getProductDetails`,
 `searchProductsByCategory`, `getBusinessInformation`, `getProductImages`, and
@@ -46,7 +91,7 @@ Search supports name, descriptions, structured description content, categories,
 Bangla/Banglish/English synonym groups, strict attribute matching and relevance
 ranking. Gemini can retry with relevant alternatives, at most three searches.
 The limit is five provider rounds, twelve tool calls, eighteen catalog operations,
-2,048 output tokens per round, six products, twelve history entries, and a
+2,048 output tokens per round, six products, forty history entries, and a
 55-second provider deadline. Database operations have a 2.5-second limit.
 After three searches, further search functions are disabled and Gemini must
 finish from verified results or report a concise no-match response. Search
@@ -158,3 +203,58 @@ The existing opt-in Azure storage live test and reference-design comparison need
 their documented external configuration. Report skipped checks separately from
 passed ones. Real customer availability/order/payment confirmations are never a
 valid test technique.
+
+
+## Manual admin media and extended history
+
+The inbox uses a WhatsApp-style rail, chat list, paper background, green outgoing
+bubbles and a photo/video attachment menu. Admins can select JPEG/PNG up to 5 MB
+or H.264 MP4 up to 16 MB, preview it, add an optional 1,024-character caption and
+send when effective chat AI is off. Videos need AAC audio if audio is present.
+The server validates the tenant, customer-initiated reply window, test allowlist,
+AI state, file type/size and request ID. A database reservation precedes upload;
+identical retries return the same record and never re-upload/re-send. Reusing an
+ID with a different file/caption is rejected. AI is checked again after upload.
+Unknown deliveries require review, not automatic resend. Stale upload/send states
+become unknown when the inbox refreshes. Photos/videos are uploaded to Meta; no
+public customer-media storage or new credentials are required. Video previews use
+an authenticated endpoint and load on demand, with private/no-store responses.
+
+Conversation context now considers up to forty recent messages and 12,000
+characters, newest first, with at most 1,000 characters per message. Older message
+records remain in the database. Explicit WhatsApp reply-to product references
+remain tenant/conversation scoped and are revalidated. Session history keeps forty
+entries; monotonic history versions preserve send idempotency after the history
+reaches its cap. A full-history continuation regression test covers this case.
+
+Groq image processing first extracts visible characteristics using the selected
+vision model without the long business prompt. Subsequent catalog/tool rounds use
+the selected text model and those untrusted observations, avoiding repeated image
+tokens. Gemini continues to use its established multimodal flow. Photo matches
+remain possible only. Current Groq limits can still constrain large histories;
+falling back to Gemini does not guarantee capacity if both accounts are limited.
+
+## Individual chat deletion shared with production
+
+Chat menu → Delete chat first checks whether the selected phone has a matching
+production conversation. A staging-only chat can be deleted locally after
+confirmation. A shared chat requires a separate production ADMIN username/password
+check against the actual production account; the demo staging login alone cannot
+authorize deletion. Credentials are transient input and never returned or stored.
+The dialog explicitly identifies production and staging impact and explains that
+delivered messages remain on the customer's phone.
+
+For the explicitly supported `personalshop_originsofbeauty_test` database, the
+existing connection accesses `personalshop_originsofbeauty` only for this owner-
+authorized operation. Both deletions run in one MongoDB transaction. Conversation
+history, receipts, AI jobs, shopping sessions/jobs and verification requests are
+removed for the selected tenant/chat only. Other chats, catalog records, orders,
+AI configuration and credentials are untouched. Failure rolls back both databases;
+there is no best-effort partial-delete fallback. Existing production change streams
+and mirroring observe the deletion. New incoming customer messages can start a new
+conversation. Production credentials/settings do not need to be changed or copied.
+
+Disposable replica-set tests verify wrong-password rejection, cleanup, unaffected
+other chats and rollback after a simulated local failure. Deployment verification
+checks production scope and transaction access read-only; it does not delete real
+customer histories as a test.
