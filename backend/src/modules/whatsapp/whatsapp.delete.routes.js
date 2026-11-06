@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { rateLimit } from "express-rate-limit";
 import ApiError from "../../utils/ApiError.js";
 import { Conversation } from "./whatsapp.model.js";
+import { testRecipientAllowed } from "./whatsapp.shopping.models.js";
 export const deleteChatRouter = express.Router();
 const productionName = "personalshop_originsofbeauty", stagingName = "personalshop_originsofbeauty_test";
 async function targetFor(req) {
@@ -41,6 +42,23 @@ async function purge(db, chat, session) {
 deleteChatRouter.get("/conversations/:id/delete-scope", async (req, res) => {
   const target = await targetFor(req);
   res.json({ data: { scope: target.scope, requiresProductionAuthentication: Boolean(target.productionChat), phone: target.chat.phone } });
+});
+deleteChatRouter.post("/conversations/:id/takeover", rateLimit({ windowMs: 60000, limit: 10, keyGenerator: req => String(req.user._id) }), async (req, res) => {
+  if (req.body?.confirmed !== true) throw new ApiError(400, "Confirm manual takeover first");
+  const target = await targetFor(req);
+  if (target.productionChat && !testRecipientAllowed(target.chat.phone)) throw new ApiError(403, "Take over real customer chats from the production inbox. Staging takeover is limited to the approved personal test recipient.");
+  const session = await mongoose.connection.startSession();
+  const stop = async (db, chat) => {
+    const options = { session };
+    await db.collection("whatsappconversations").updateOne({ _id: chat._id, store: chat.store }, { $set: { aiEnabled: false }, $inc: { aiRevision: 1 } }, options);
+    await db.collection("whatsappaijobs").updateMany({ store: chat.store, conversation: chat._id, status: { $in: ["queued", "processing"] } }, { $set: { status: "skipped", error: "Manual takeover" } }, options);
+    await db.collection("whatsappshoppingsessions").updateMany({ store: chat.store, phone: chat.phone }, { $set: { aiEnabled: false }, $inc: { revision: 1 } }, options);
+    await db.collection("whatsappshoppingjobs").updateMany({ store: chat.store, phone: chat.phone, status: { $in: ["queued", "processing"] } }, { $set: { status: "skipped", error: "Manual takeover" } }, options);
+  };
+  try { await session.withTransaction(async () => { if (target.productionChat) await stop(target.db, target.productionChat); await stop(mongoose.connection.db, target.chat); }); }
+  catch { throw new ApiError(503, "Manual takeover could not complete. No settings were changed; try again."); }
+  finally { await session.endSession(); }
+  res.json({ data: { aiEnabled: false, manualReplyAvailable: true } });
 });
 deleteChatRouter.delete("/conversations/:id", rateLimit({ windowMs: 900000, limit: 10, keyGenerator: req => String(req.user._id) }), async (req, res) => {
   if (req.body?.confirmed !== true) throw new ApiError(400, "Confirm permanent chat deletion first");

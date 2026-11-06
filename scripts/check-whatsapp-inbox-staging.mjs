@@ -43,7 +43,7 @@ try {
   const scope = await call(`/whatsapp/conversations/${chat._id}/delete-scope`);
   report.push({ check: "shared-deletion-scope-read-only", passed: true, scope: scope.scope, productionAuthenticationRequired: scope.requiresProductionAuthentication });
   if (process.argv.includes("--send-media")) {
-    await call(`/whatsapp/conversations/${chat._id}/ai`, "PATCH", { enabled: false });
+    await call(`/whatsapp/conversations/${chat._id}/takeover`, "POST", { confirmed: true });
     const product = await Product.findOne({ tenantId: store._id, isActive: true, deletedAt: null, "images.0.url": /^https:/ }).lean();
     const image = await fetch(product.images[0].url, { signal: AbortSignal.timeout(15000) });
     if (!image.ok) throw Error("Catalog photo unavailable");

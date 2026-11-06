@@ -105,7 +105,7 @@ whatsappRouter.get("/conversations", async (req, res) => {
   if (shoppingEnabled()) {
     displayedSettings = await StagingAISettings.findOne({ store: req.store._id });
     const sessions = await ShoppingSession.find({ store: req.store._id, owner: req.user._id }).sort({ createdAt: -1 }).lean();
-    conversations = conversations.map(chat => testRecipientAllowed(chat.phone) ? { ...chat, stagingTest: true, aiEnabled: Boolean(sessions.find(session => session.phone === chat.phone)?.aiEnabled) } : chat);
+    conversations = conversations.map(chat => testRecipientAllowed(chat.phone) ? { ...chat, stagingTest: true, productionAIEnabled: Boolean(settings?.enabled && chat.aiEnabled), aiEnabled: Boolean(sessions.find(session => session.phone === chat.phone)?.aiEnabled) } : chat);
   }
   const pendingVerifications = shoppingEnabled() ? await AvailabilityVerification.countDocuments({ store: req.store._id, status: "pending" }) : 0;
   res.json({ data: { pendingVerifications, shoppingAvailable: shoppingEnabled(), productionAIEnabled: settings?.enabled || false, conversations, aiEnabled: displayedSettings?.enabled || false, autoRepliesAvailable: !process.env.WHATSAPP_WEBHOOK_RELAY_URL, configured: Boolean(process.env.META_WHATSAPP_ACCESS_TOKEN && process.env.META_WHATSAPP_PHONE_NUMBER_ID && /^v\d+\.0$/.test(process.env.META_GRAPH_API_VERSION || "")), serverTime: new Date() } });
@@ -152,7 +152,7 @@ whatsappRouter.post("/conversations/:id/messages", rateLimit({ windowMs: 60000, 
     return res.json({ data: previous });
   }
   if (!windowOpen(chat.lastInboundAt)) throw new ApiError(409, "The 24-hour reply window is closed. Ask the customer to message you again.");
-  if (process.env.WHATSAPP_WEBHOOK_RELAY_URL && await AISettings.exists({ store: req.store._id, enabled: true })) throw new ApiError(409, "AI is active in production. Use the production inbox for manual takeover so pending automatic replies are cancelled there.");
+  if (process.env.WHATSAPP_WEBHOOK_RELAY_URL && (!shoppingEnabled() || !testRecipientAllowed(chat.phone) || chat.aiEnabled) && await AISettings.exists({ store: req.store._id, enabled: true })) throw new ApiError(409, "Take over this chat before replying manually so pending automatic replies are cancelled.");
   if (shoppingEnabled()) await ShoppingSession.updateMany({ store: req.store._id, phone: chat.phone }, { $set: { aiEnabled: false }, $inc: { revision: 1 } });
   await Conversation.updateOne({ _id: chat._id }, { $set: { aiEnabled: false }, $inc: { aiRevision: 1 } });
   const message = await sendWhatsAppText({ chat, text, requestId, source: "admin" });

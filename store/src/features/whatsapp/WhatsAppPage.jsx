@@ -37,7 +37,7 @@ export default function WhatsAppPage() {
   const chats = useQuery({ queryKey: ["whatsapp", "conversations"], queryFn: () => request("get", "/whatsapp/conversations"), refetchInterval: liveStatus === "connected" ? 60000 : 4000 });
   const messages = useQuery({ queryKey: ["whatsapp", selected], queryFn: () => request("get", `/whatsapp/conversations/${selected}/messages`), enabled: Boolean(selected), refetchInterval: liveStatus === "connected" ? 60000 : 3000 });
   const chat = chats.data?.conversations.find(c => c._id === selected);
-  const productionTakeoverRequired = chats.data?.autoRepliesAvailable === false && (chats.data?.productionAIEnabled ?? chats.data?.aiEnabled);
+  const productionTakeoverRequired = chats.data?.autoRepliesAvailable === false && (chat?.stagingTest ? (chat.productionAIEnabled ?? chats.data?.productionAIEnabled) : (chats.data?.productionAIEnabled ?? chats.data?.aiEnabled));
   const mediaBlocked = Boolean(chat?.aiEnabled && chats.data?.aiEnabled);
   const visibleChats = chats.data?.conversations.filter(c => `${c.name || ""} ${c.phone} ${c.preview || ""}`.toLowerCase().includes(search.toLowerCase())) || [];
   useEffect(() => { bottom.current?.scrollIntoView({ block: "nearest" }); }, [messages.data?.messages?.length, selected]);
@@ -75,6 +75,11 @@ export default function WhatsAppPage() {
     try { await request("patch", `/whatsapp/conversations/${selected}/ai`, { enabled: !chat.aiEnabled }); await client.invalidateQueries({ queryKey: ["whatsapp", "conversations"] }); }
     catch (err) { setError(errorMessage(err)); }
   };
+  const takeOver = async () => {
+    setSending(true); setError("");
+    try { await request("post", `/whatsapp/conversations/${selected}/takeover`, { confirmed: true }); await client.invalidateQueries({ queryKey: ["whatsapp"] }); }
+    catch (err) { setError(errorMessage(err)); } finally { setSending(false); }
+  };
   const allMessages = [...older, ...(messages.data?.messages || [])].filter((m, i, list) => list.findIndex(x => x._id === m._id) === i);
   return <section className="wa-page">
     <div className="wa-title"><div className="wa-title-brand"><TbBrandWhatsapp aria-hidden="true" /><div><h1>WhatsApp inbox</h1><p role="status">{liveStatus === "connected" ? "Live · Connected" : "Connecting live chat · Updates refresh automatically"}</p></div></div><div className="wa-menu-wrap"><button className="wa-icon" aria-label="Inbox menu" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(value => !value)}><TbDotsVertical /></button>{menu && <div role="menu" className="wa-menu"><button role="menuitem" onClick={() => { setSettingsOpen(true); setMenu(false); }}><TbSettings /> AI Settings</button></div>}</div></div>
@@ -97,7 +102,7 @@ export default function WhatsAppPage() {
         </div>
         {chat.stagingTest && ["queued", "processing"].includes(messages.data?.aiJob?.status) && <p className="wa-notice" role="status">{messages.data.aiJob.status === "queued" ? "AI will reply 10 seconds after the latest customer message." : "AI is preparing a reply."}</p>}
         {messages.data?.aiJob?.error && <p className="wa-notice" role="status">{messages.data.aiJob.error}</p>}
-        {productionTakeoverRequired && <p className="wa-notice">AI is active in production. Use the production inbox to take over and send a manual reply.</p>}
+        {productionTakeoverRequired && <div className="wa-notice">AI is active for this chat in production. {chat.stagingTest ? <button type="button" className="wa-secondary" onClick={takeOver} disabled={sending}>Take over chat</button> : <a href="https://originsofbeauty.web.app/secure/admin/whatsapp" target="_blank" rel="noreferrer">Open the production inbox to reply manually</a>}</div>}
         <div className="wa-window">{messages.data?.canReply ? `Reply window open until ${new Date(messages.data.windowExpiresAt).toLocaleString()}` : "Reply window closed. The customer must message you again before you can send text."}</div>
         {mediaBlocked && <p className="wa-media-hint">Turn off AI for this chat to attach photos or videos.</p>}
         {error && <p className="wa-error" role="alert">{error}</p>}

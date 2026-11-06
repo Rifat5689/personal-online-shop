@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import bcrypt from "../backend/node_modules/bcryptjs/index.js";
 import { MongoMemoryReplSet } from "mongodb-memory-server";
 import mongoose from "../backend/node_modules/mongoose/index.js";
@@ -9,10 +10,11 @@ import { Conversation, Message, AISettings, AIJob, Receipt } from "../backend/sr
 import { ShoppingSession, ShoppingJob, AvailabilityVerification } from "../backend/src/modules/whatsapp/whatsapp.shopping.models.js";
 import { app } from "../backend/src/app.js";
 test("shared chat deletion requires production authentication and atomically removes only the selected chat", { timeout: 60000 }, async () => {
-  Object.assign(process.env, { NODE_ENV: "test", DATABASE_ROLE: "test", STORE_SLUG: "originsofbeauty", ACCESS_TOKEN_SECRET: "delete-chat-tests" });
+  Object.assign(process.env, { NODE_ENV: "test", DATABASE_ROLE: "test", STORE_SLUG: "originsofbeauty", ACCESS_TOKEN_SECRET: "delete-chat-tests", META_WHATSAPP_ACCESS_TOKEN: "fake-token", META_WHATSAPP_PHONE_NUMBER_ID: "123456", META_GRAPH_API_VERSION: "v25.0" });
   const db = await MongoMemoryReplSet.create({ replSet: { count: 1 }, binary: { version: "7.0.14" } });
   await mongoose.connect(db.getUri(), { dbName: "personalshop_originsofbeauty_test" });
-  const server = app.listen(0), production = mongoose.connection.getClient().db("personalshop_originsofbeauty");
+  const server = app.listen(0), production = mongoose.connection.getClient().db("personalshop_originsofbeauty"), originalFetch = globalThis.fetch;
+  globalThis.fetch = (url, options) => String(url).startsWith("https://graph.facebook.com/") ? Promise.resolve(new Response(JSON.stringify({ messages: [{ id: "wamid.manual-takeover" }] }))) : originalFetch(url, options);
   try {
     const store = await Store.create({ name: "QA", slug: "originsofbeauty" });
     const admin = await User.create({ username: "demouser", email: "delete@example.test", password: "123456", role: "ADMIN", tenantId: store._id });
@@ -20,7 +22,8 @@ test("shared chat deletion requires production authentication and atomically rem
     await production.collection("stores").insertOne({ _id: productionStore, slug: "originsofbeauty" });
     await production.collection("users").insertOne({ username: "origins", role: "ADMIN", tenantId: productionStore, password: await bcrypt.hash("640008", 10), isActive: true });
     await production.collection("whatsappaisettings").insertOne({ store: productionStore, enabled: true });
-    const chat = await Conversation.create({ store: store._id, phone: "8801300000000", aiEnabled: true });
+    await AISettings.create({ store: store._id, enabled: true });
+    const chat = await Conversation.create({ store: store._id, phone: "8801300000000", aiEnabled: true, lastInboundAt: new Date() });
     const other = await Conversation.create({ store: store._id, phone: "8801300000001" });
     const message = await Message.create({ store: store._id, conversation: chat._id, direction: "inbound", timestamp: new Date(), metaId: "wamid.delete" });
     await Receipt.create({ store: store._id, metaId: message.metaId, status: "read" });
@@ -39,6 +42,15 @@ test("shared chat deletion requires production authentication and atomically rem
     assert.equal((await call(chat._id, { confirmed: true, productionUsername: "demouser", productionPassword: "123456" })).status, 403);
     assert.equal((await call(chat._id, { confirmed: true, productionUsername: "origins", productionPassword: "000000" })).status, 403);
     assert.equal(await Conversation.countDocuments(), 2); assert.equal(await production.collection("whatsappmessages").countDocuments(), 1);
+    process.env.WHATSAPP_TEST_RECIPIENTS = chat.phone;
+    process.env.WHATSAPP_WEBHOOK_RELAY_URL = "https://originsofbeauty-aegyapebd0gxadfh.centralindia-01.azurewebsites.net/api/v1/whatsapp/webhook";
+    const takeover = await fetch(root + chat._id + "/takeover", { method: "POST", headers, body: JSON.stringify({ confirmed: true }) }); assert.equal(takeover.status, 200);
+    assert.equal((await production.collection("whatsappconversations").findOne({ _id: productionChat })).aiEnabled, false);
+    assert.equal((await production.collection("whatsappaisettings").findOne()).enabled, true);
+    assert.equal((await Conversation.findById(chat._id)).aiEnabled, false);
+    const manual = await fetch(root + chat._id + "/messages", { method: "POST", headers, body: JSON.stringify({ text: "Manual reply after takeover", requestId: randomUUID() }) }); assert.equal(manual.status, 200);
+    const state = (await (await fetch(root.slice(0, -1), { headers })).json()).data;
+    assert.equal(state.productionAIEnabled, true); assert.equal(state.conversations.find(item => String(item._id) === String(chat._id)).productionAIEnabled, false);
     const success = await call(chat._id, { confirmed: true, productionUsername: "origins", productionPassword: "640008" }); assert.equal(success.status, 200);
     assert.equal(JSON.stringify(await success.json()).includes("640008"), false);
     assert.equal(await Conversation.countDocuments(), 1); assert.equal(await production.collection("whatsappconversations").countDocuments(), 1);
@@ -56,5 +68,5 @@ test("shared chat deletion requires production authentication and atomically rem
     finally { localDb.collection = collection; }
     assert.equal(await Conversation.countDocuments({ _id: rollbackChat._id }), 1);
     assert.equal((await production.collection("whatsappconversations").findOne({ phone: rollbackChat.phone })).aiEnabled, true);
-  } finally { server.close(); server.closeAllConnections(); await mongoose.disconnect(); await db.stop(); }
+  } finally { globalThis.fetch = originalFetch; delete process.env.WHATSAPP_WEBHOOK_RELAY_URL; server.close(); server.closeAllConnections(); await mongoose.disconnect(); await db.stop(); }
 });

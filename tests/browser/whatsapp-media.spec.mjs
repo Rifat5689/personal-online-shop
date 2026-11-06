@@ -2,12 +2,13 @@ import { test, expect } from "@playwright/test";
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lCEAAAAASUVORK5CYII=", "base64");
 test("WhatsApp-style media composer previews photos/videos and requires AI off", async ({ page }, info) => {
   await page.goto("/secure/admin/login"); await page.getByRole("button", { name: "Sign In", exact: true }).click(); await expect(page).toHaveURL(/dashboard/);
-  let ai = false, sends = 0; const messages = [{ _id: "inbound", direction: "inbound", text: "Apu product er pic den", type: "text", timestamp: new Date().toISOString(), status: "received" }];
+  let ai = false, productionOwnsChat = true, sends = 0; const messages = [{ _id: "inbound", direction: "inbound", text: "Apu product er pic den", type: "text", timestamp: new Date().toISOString(), status: "received" }];
   await page.routeWebSocket("**/api/v1/whatsapp/live", socket => socket.onMessage(() => socket.send(JSON.stringify({ type: "ready" }))));
   await page.route("**/api/v1/whatsapp/**", async route => {
     const path = new URL(route.request().url()).pathname; let data;
     if (path.endsWith("live-ticket")) data = { ticket: "fixture" };
-    else if (path.endsWith("conversations")) data = { configured: true, aiEnabled: true, conversations: [{ _id: "fixture", name: "Test customer", phone: "8801300000000", aiEnabled: ai, preview: "Apu product er pic den", lastMessageAt: new Date().toISOString() }] };
+    else if (path.endsWith("conversations")) data = { configured: true, aiEnabled: true, productionAIEnabled: true, autoRepliesAvailable: false, conversations: [{ _id: "fixture", name: "Test customer", phone: "8801300000000", stagingTest: true, productionAIEnabled: productionOwnsChat, aiEnabled: ai, preview: "Apu product er pic den", lastMessageAt: new Date().toISOString() }] };
+    else if (path.endsWith("/takeover")) { expect(route.request().postDataJSON().confirmed).toBe(true); productionOwnsChat = false; data = { aiEnabled: false }; }
     else if (path.endsWith("/ai")) { ai = route.request().postDataJSON().enabled; data = { aiEnabled: ai }; }
     else if (path.endsWith("/media")) {
       expect(route.request().headers()["content-type"]).toContain("multipart/form-data");
@@ -17,6 +18,7 @@ test("WhatsApp-style media composer previews photos/videos and requires AI off",
     await route.fulfill({ json: { data } });
   });
   await page.goto("/secure/admin/whatsapp"); await page.getByRole("button", { name: /Test customer/ }).click();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeDisabled(); await page.getByRole("button", { name: "Take over chat", exact: true }).click(); await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "Emoji", exact: true }).click(); await page.getByRole("button", { name: "Insert 😊", exact: true }).click(); await expect(page.getByRole("textbox", { name: "Message", exact: true })).toHaveValue("😊"); await page.getByRole("textbox", { name: "Message", exact: true }).fill("");
   await page.getByRole("button", { name: "Attach media", exact: true }).click(); await expect(page.getByRole("button", { name: "Photos", exact: true })).toBeVisible(); await expect(page.getByRole("button", { name: "Videos", exact: true })).toBeVisible();
   await page.getByLabel("Choose photo or video").setInputFiles({ name: "product.png", mimeType: "image/png", buffer: png });
